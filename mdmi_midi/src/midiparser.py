@@ -118,6 +118,7 @@ def getValues(str, n=16):
     return temp
 
 class File:
+    UnknownEvents = 0 # Added by MKS
     def __init__(self, file):
         self.file = file
         self.format = None
@@ -127,7 +128,7 @@ class File:
 
 	self.file = open(self.file, 'rb')
 	str = self.file.read()
-	self.file.close()
+        self.file.close()
 
 	self.read(str)
 
@@ -186,7 +187,7 @@ class Event:
 	self.delta, str = getVariableLengthNumber(str)
 	self.absolute = prev_time + self.delta
 
-	# use running status?
+        # use running status?
 	if not (ord(str[0]) & 0x80):
 	    # squeeze a duplication of the running status into the data string
 	    str = prev_status + str
@@ -201,10 +202,10 @@ class Event:
 
 	# handle voice events
 	channel_msg = ord(self.status) & 0xF0
-	if channel_msg == voice.NoteOn or \
+        if channel_msg == voice.NoteOn or \
 		channel_msg == voice.NoteOff or \
 		channel_msg == voice.PolyphonicKeyPressure:
-	    self.detail = EventNote()
+            self.detail = EventNote()
 	    self.detail.note_no = ord(str[0])
 	    self.detail.velocity = ord(str[1])
 	    str = str[2:]
@@ -280,28 +281,35 @@ class Event:
 		self.detail.sub_frame = ord(str[4])
 		str = str[length:]
 
-	    elif type == meta.EndTrack:
+            elif type == meta.EndTrack:
 		str = str[length:] # pass on to next track
 
-	    else: has_meta = FALSE
+            # Added by MKS - Ignore non-standard (possibly proprieraty) 0x21 meta event
+            elif meta_msg == 0x21:# or meta_msg == 0x6 or meta_msg == 0x4:
+		str = str[length:] # pass on to next track
 
-	elif meta_msg == meta.SystemExclusive or \
+#            elif meta_msg == 0x6:
+#                print "meta 0x60 !!!!!!"
+                
+            else: has_meta = FALSE
+
+        elif meta_msg == meta.SystemExclusive or \
 		meta_msg == meta.SystemExclusivePacket:
 	    self.detail = MetaValues()
 	    self.detail.length, str = getVariableLengthNumber(str)
 	    self.detail.values = getValues(str, self.detail.length)
 	    str = str[self.detail.length:]
-
-	else: has_meta = FALSE
+        
+        else: has_meta = FALSE
 
 	if has_channel:
 	    self.type = channel_msg
 	elif has_meta:
 	    self.type = meta_msg
 	else:
-            print "midiparser.py: uknown event"
+            # Block changed by MKS
+            print "WARNING! Unknown event: channel_msg:", hex(channel_msg), "meta_msg:", hex(meta_msg)
+            File.UnknownEvents += 1
             return
-        #    raise "Unknown event."
 
 	return str
-

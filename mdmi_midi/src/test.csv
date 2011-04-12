@@ -1,0 +1,4 @@
+artist;instruments;MIDI Format;tempo;num_tracks;filename;unknown_events;midi_division;genre
+PopArtist#1;[];1;[810810];7;Pop\PopArtist#1\hey_jude.mid;0;192;Pop
+RockArtist#1;[];1;[312500, 333333, 344827, 444444];15;Rock\RockArtist#1\help.mid;0;192;Rock
+RockArtist#2;[];1;[576923];12;Rock\RockArtist#2\heather.mid;11;120;Rock
