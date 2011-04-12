@@ -44,14 +44,17 @@ def scan(file, artist, genre):
 def main(argv):
     path = '..\\data\\Library\\'
 
+    # ignore = [".svn", "all-wcprops"]
     # Scan all files in directory
     for genre in os.listdir(path):
-        if genre == ".svn": continue
+        if genre[0] == ".": continue
         if os.path.isdir(path + genre):
             for artist in os.listdir(path + genre):
+                if artist[0] == ".": continue
                 for song in os.listdir(path + genre + "\\" + artist):
-                    print "Genre:", genre, "| Artist:", artist, "| Song:", song
-                    print scan(path + genre + "\\" + artist + "\\" + song, artist, genre)
+                    if not os.path.isdir(path + genre + "\\" + artist + "\\" + song):
+                        print "Genre:", genre, "| Artist:", artist, "| Song:", song
+                        print scan(path + genre + "\\" + artist + "\\" + song, artist, genre)
 
 if __name__ == "__main__":
     main(sys.argv)
