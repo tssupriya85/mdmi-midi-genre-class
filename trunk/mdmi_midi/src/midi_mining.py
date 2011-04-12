@@ -14,11 +14,11 @@ instruments += ["Celesta", "Glockenspiel", "Music Box", "Vibraphone", "Marimba",
 # Organ
 instruments += ["Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Tango Accordion"]
 # Guitar
-instruments += ["24 Acoustic Guitar (nylon)", "25 Acoustic Guitar (steel)", "26 Electric Guitar (jazz)", "27 Electric Guitar (clean)", "28 Electric Guitar (muted)", "29 Overdriven Guitar", "30 Distortion Guitar", "31 Guitar Harmonics"]
+instruments += ["Acoustic Guitar (nylon)", "Acoustic Guitar (steel)", "Electric Guitar (jazz)", "Electric Guitar (clean)", "Electric Guitar (muted)", "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics"]
 # Bass
-instruments += ["32 Acoustic Bass", "33 Electric Bass (finger)", "34 Electric Bass (pick)", "35 Fretless Bass", "36 Slap Bass 1", "37 Slap Bass 2", "38 Synth Bass 1", "39 Synth Bass 2"]
+instruments += ["Acoustic Bass", "Electric Bass (finger)", "34 Electric Bass (pick)", "35 Fretless Bass", "36 Slap Bass 1", "37 Slap Bass 2", "38 Synth Bass 1", "39 Synth Bass 2"]
 # Strings
-instruments += ["40 Violin", "41 Viola", "42 Cello", "43 Contrabass", "44 Tremolo Strings", "45 Pizzicato Strings", "46 Orchestral Harp", "47 Timpani"]
+instruments += ["Violin", "41 Viola", "42 Cello", "43 Contrabass", "44 Tremolo Strings", "45 Pizzicato Strings", "46 Orchestral Harp", "47 Timpani"]
 # Ensemble
 instruments += ["48 String Ensemble 1", "49 String Ensemble 2", "50 Synth Strings 1", "51 Synth Strings 2", "52 Choir Aahs", "53 Voice Oohs", "54 Synth Choir", "55 Orchestra Hit"]
 # Brass
