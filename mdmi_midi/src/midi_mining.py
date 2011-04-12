@@ -4,45 +4,37 @@ import midiparser
 import os
 import csv
 
+""" (Groups) """;          instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
+
+""" Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
+""" Chromatic Percussion """;   instruments += ["Celesta", "Glockenspiel", "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer"]
+""" Organ """;                  instruments += ["Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Tango Accordion"]
+""" Guitar """;                 instruments += ["Acoustic Guitar (nylon)", "Acoustic Guitar (steel)", "Electric Guitar (jazz)", "Electric Guitar (clean)", "Electric Guitar (muted)", "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics"]
+""" Bass """;                   instruments += ["Acoustic Bass", "Electric Bass (finger)", "Electric Bass (pick)", "Fretless Bass", "Slap Bass 1", "Slap Bass 2", "Synth Bass 1", "Synth Bass 2"]
+""" Strings """;                instruments += ["Violin", "Viola", "Cello", "Contrabass", "Tremolo Strings", "Pizzicato Strings", "Orchestral Harp", "Timpani"]
+""" Ensemble """;               instruments += ["String Ensemble 1", "String Ensemble 2", "Synth Strings 1", "Synth Strings 2", "Choir Aahs", "Voice Oohs", "Synth Choir", "Orchestra Hit"]
+""" Brass """;                  instruments += ["Trumpet", "Trombone", "Tuba", "Muted Trumpet", "French Horn", "Brass Section", "Synth Brass 1", "Synth Brass 2"]
+""" Reed """;                   instruments += ["Soprano Sax", "Alto Sax", "Tenor Sax", "Baritone Sax", "Oboe", "English Horn", "Bassoon", "Clarinet"]
+""" Pipe """;                   instruments += ["Piccolo", "Flute", "Recorder", "Pan Flute", "Blown Bottle", "Shakuhachi", "Whistle", "Ocarina"]
+""" Synth Lead """;             instruments += ["Lead 1 (square)", "Lead 2 (sawtooth)", "Lead 3 (calliope)", "Lead 4 (chiff)", "Lead 5 (charang)", "Lead 6 (voice)", "Lead 7 (fifths)", "Lead 8 (bass + lead)"]
+""" Synth Pad """;              instruments += ["Pad 1 (new age)", "Pad 2 (warm)", "Pad 3 (polysynth)", "Pad 4 (choir)", "Pad 5 (bowed)", "Pad 6 (metallic)", "Pad 7 (halo)", "Pad 8 (sweep)"]
+""" Synth Effects """;          instruments += ["FX 1 (rain)", "FX 2 (soundtrack)", "FX 3 (crystal)", "FX 4 (atmosphere)", "FX 5 (brightness)", "FX 6 (goblins)", "FX 7 (echoes)", "FX 8 (sci-fi)"]
+""" Ethnic """;                 instruments += ["Sitar", "Banjo", "Shamisen", "Koto", "Kalimba", "Bagpipe", "Fiddle", "Shanai"]
+""" Percussive """;             instruments += ["Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko Drum", "Melodic Tom", "Synth Drum"]
+""" Sound effects """;          instruments += ["Reverse Cymbal", "Guitar Fret Noise", "Breath Noise", "Seashore", "Bird Tweet", "Telephone Ring", "Helicopter", "Applause", "Gunshot"]
+
 # Translate MIDI note numbers to internatinal note format
-
-instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
-# Piano
-instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
-# Chromatic Percussion
-instruments += ["Celesta", "Glockenspiel", "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer"]
-# Organ
-instruments += ["Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Tango Accordion"]
-# Guitar
-instruments += ["Acoustic Guitar (nylon)", "Acoustic Guitar (steel)", "Electric Guitar (jazz)", "Electric Guitar (clean)", "Electric Guitar (muted)", "Overdriven Guitar", "Distortion Guitar", "Guitar Harmonics"]
-# Bass
-instruments += ["Acoustic Bass", "Electric Bass (finger)", "34 Electric Bass (pick)", "35 Fretless Bass", "36 Slap Bass 1", "37 Slap Bass 2", "38 Synth Bass 1", "39 Synth Bass 2"]
-# Strings
-instruments += ["Violin", "41 Viola", "42 Cello", "43 Contrabass", "44 Tremolo Strings", "45 Pizzicato Strings", "46 Orchestral Harp", "47 Timpani"]
-# Ensemble
-instruments += ["48 String Ensemble 1", "49 String Ensemble 2", "50 Synth Strings 1", "51 Synth Strings 2", "52 Choir Aahs", "53 Voice Oohs", "54 Synth Choir", "55 Orchestra Hit"]
-# Brass
-instruments += ["56 Trumpet", "57 Trombone", "58 Tuba", "59 Muted Trumpet", "60 French Horn", "61 Brass Section", "62 Synth Brass 1", "63 Synth Brass 2"]
-# Reed
-instruments += ["64 Soprano Sax", "65 Alto Sax", "66 Tenor Sax", "67 Baritone Sax", "68 Oboe", "69 English Horn", "70 Bassoon", "71 Clarinet"]
-# Pipe
-instruments += ["72 Piccolo", "73 Flute", "74 Recorder", "75 Pan Flute", "76 Blown Bottle", "77 Shakuhachi", "78 Whistle", "79 Ocarina"]
-# Synth Lead
-instruments += ["80 Lead 1 (square)", "81 Lead 2 (sawtooth)", "82 Lead 3 (calliope)", "83 Lead 4 (chiff)", "84 Lead 5 (charang)", "85 Lead 6 (voice)", "86 Lead 7 (fifths)", "87 Lead 8 (bass + lead)"]
-# Synth Pad
-instruments += ["88 Pad 1 (new age)", "89 Pad 2 (warm)", "90 Pad 3 (polysynth)", "91 Pad 4 (choir)", "92 Pad 5 (bowed)", "93 Pad 6 (metallic)", "94 Pad 7 (halo)", "95 Pad 8 (sweep)"]
-# Synth Effects
-instruments += ["96 FX 1 (rain)", "97 FX 2 (soundtrack)", "98 FX 3 (crystal)", "99 FX 4 (atmosphere)", "100 FX 5 (brightness)", "101 FX 6 (goblins)", "102 FX 7 (echoes)", "103 FX 8 (sci-fi)"]
-# Ethnic
-instruments += ["104 Sitar", "105 Banjo", "106 Shamisen", "107 Koto", "108 Kalimba", "109 Bagpipe", "110 Fiddle", "111 Shanai"]
-# Percussive
-instruments += ["112 Tinkle Bell", "113 Agogo", "114 Steel Drums", "115 Woodblock", "116 Taiko Drum", "117 Melodic Tom", "118 Synth Drum"]
-# Sound effects
-instruments += ["119 Reverse Cymbal", "120 Guitar Fret Noise", "121 Breath Noise", "122 Seashore", "123 Bird Tweet", "124 Telephone Ring", "125 Helicopter", "126 Applause", "127 Gunshot"]
-
 notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
 def note(note_number):
-    return notes[note_number % 12] + str((note_number / 12) - 1)
+    return notes[note_number % 12] + str((note_number // 12) - 1)
+
+# Translate instrument number to instrument name
+def instrument(instrument_number):
+    return instruments[instrument_number]
+
+# Translate instrument number to the instrument group to which it belongs
+def instrument_group(instrument_number):
+    return instrument_groups[instrument_number // 8]
 
 # Return greatest common divisor amongst list of numbers using Euclid's Algorithm.
 def greatest_common_divisor(list):
@@ -56,14 +48,15 @@ def scan(file, artist, genre):
     info = {}
     midi = midiparser.File(file)
 
-    info["filename"]        = file.lstrip(midi_library_path)
-    info["artist"]          = artist
-    info["genre"]           = genre
-    info["num_tracks"]      = midi.num_tracks
-    info["midi_division"]   = midi.division
-    info["tempo"]           = []
-    info["instruments"]     = []
-    info["MIDI Format"]     = midi.format
+    info["filename"]          = file.lstrip(midi_library_path)
+    info["artist"]            = artist
+    info["genre"]             = genre
+    info["num_tracks"]        = midi.num_tracks
+    info["midi_division"]     = midi.division
+    info["tempo"]             = []
+    info["instruments"]       = []
+    info["instrument_groups"] = []
+    info["midi_format"]       = midi.format
 
     for track in midi.tracks:
         timings = []
@@ -74,7 +67,8 @@ def scan(file, artist, genre):
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
                 #print note(event.detail.note_no),
             if event.type == midiparser.voice.ProgramChange:
-                print "ProgramChange: ", instruments[event.detail.amount]
+                if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
+                if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
             if event.type == midiparser.meta.SetTempo:
                 if event.detail.tempo not in info["tempo"]: info["tempo"].append(event.detail.tempo)
             if event.type == midiparser.meta.InstrumentName:
@@ -84,7 +78,7 @@ def scan(file, artist, genre):
 	    if event.type == midiparser.meta.CuePoint:
 		print "CuePoint:", event.detail.text.strip()
 	    if event.type == midiparser.meta.Lyric:
-		print "Lyric:", event.detail.text.strip(),
+		print "[Lyric]", event.detail.text.strip(),
 	    #if event.type == midiparser.meta.KeySignature:
 		# ...
         if timings:
