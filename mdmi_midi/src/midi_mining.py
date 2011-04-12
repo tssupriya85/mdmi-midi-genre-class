@@ -46,6 +46,7 @@ def main(argv):
 
     # Scan all files in directory
     for genre in os.listdir(path):
+        if genre == ".svn": continue
         if os.path.isdir(path + genre):
             for artist in os.listdir(path + genre):
                 for song in os.listdir(path + genre + "\\" + artist):
