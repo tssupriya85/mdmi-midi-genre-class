@@ -43,6 +43,8 @@ def greatest_common_divisor(list):
         return a
     return reduce(gcd, list) # Return gcd(...(gcd(a,b),c))...)
 
+show_notes = False
+
 # Scans a midi file and returns a dictionary containing information about the file
 def scan(file, artist, genre):
     info = {}
@@ -60,12 +62,13 @@ def scan(file, artist, genre):
 
     for track in midi.tracks:
         timings = []
+        if show_notes: print
         for event in track.events:
             if event.type == midiparser.voice.NoteOn:
                 pass
                 timings.append(event.absolute)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
-                #print note(event.detail.note_no),
+                if show_notes: print note(event.detail.note_no),
             if event.type == midiparser.voice.ProgramChange:
                 if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
                 if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
@@ -84,7 +87,7 @@ def scan(file, artist, genre):
         if timings:
             gcd = greatest_common_divisor(timings)
             timings = [x / gcd for x in timings]
-            #print("gcd:", gcd, "-", timings)
+            #print "gcd:", gcd, "-", timings
             #print "(timing)"
     info["unknown_events"] = midi.UnknownEvents
     return info
@@ -93,6 +96,7 @@ def scan(file, artist, genre):
 
 midi_library_path = '..\\data\\Library\\'
 output_filename = ''
+file_limit = -1 # Indicates how many files should be processed before stopping. -1 means that all files will be processed.
 
 def main(argv):
     # If no output_filename chosen, print to standard output, else to the chosen file
@@ -102,6 +106,7 @@ def main(argv):
 
     # Scan all midi files in library. Directory format is expected to be \Genre\Artist\
     first = True # Used for checking if this is the first file, and attribute headers therefore should be printed
+    file_count = 0 # Counts the number of MIDI files processed
     for genre in os.listdir(midi_library_path): # Search all genre directories
         if genre[0] == ".": continue # Ignore hidden files
         if os.path.isdir(midi_library_path + genre):
@@ -109,9 +114,11 @@ def main(argv):
                 if artist[0] == ".": continue # Ignore hidden files
                 for song in os.listdir(midi_library_path + genre + "\\" + artist): # Search for midi files in artist directory
                     if not os.path.isdir(midi_library_path + genre + "\\" + artist + "\\" + song): # Ignore any subpaths in artist directory
+                        file_count += 1
                         info = scan(midi_library_path + genre + "\\" + artist + "\\" + song, artist, genre) # Scan found midi file
                         if first: csv_writer.writerow(info.keys()); first = False # Print attribute header if this is the first file
                         csv_writer.writerow([value for key, value in info.items()]) # Print values
+                        if file_count == file_limit: return # If file_count limit reached, stop scanning
 
 if __name__ == "__main__":
     main(sys.argv)
