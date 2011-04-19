@@ -191,4 +191,4 @@ if __name__ == "__main__":
             if sequence_count < print_note_sequences: print_note_sequence(track)
             sequence_count += 1
             sequence_size += sys.getsizeof(track)
-    print "Size of note sequence data structure in memory:", sequence_size // 1024.0**2, "MiB"
+    print "Sequence data structure contains", sequence_count, "sequences, and uses", sequence_size // 1024.0**2, "MiB of memory."
