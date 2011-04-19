@@ -1,11 +1,38 @@
 #!/usr/bin/python
+
+#  Batch MIDI File Information Extractor & Preprocessor
+#  Made for the MDMI-F2011 Data Mining Project
+#  by Martin Kjaer Svendsen & Perry Dahl Christensen
+
+""" Note sequence loader configuration """
+
+# Lets sequences contain tuples of (time, note) instead of just notes. Time is discretized.
+# (would undiscretized be better for the sequence pattern mining algorithm?)
+timestamp_notes = False
+
+# Should there be empty slots in the array corresponding to gaps (pauses) between notes?
+allow_gaps_in_sequences = False
+
+# Notes per midi division, higher value means less change of note timing during time discretization, but more gaps between notes
+discretization_granularity = 4
+
+""" File loader configuration """
+
+midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # Path of midi library. Should be set to local MDMI Dropbox folder
+output_filename = '' # No filename means print to standard output
+file_limit = 25 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+print_note_sequences = 5 # Prints x first note sequences when done processing MIDI files
+
+################################################################################
+
 import sys
 import midiparser
 import os
 import csv
+import time
+import types
 
-""" (Groups) """;          instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
-
+""" ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
 """ Chromatic Percussion """;   instruments += ["Celesta", "Glockenspiel", "Music Box", "Vibraphone", "Marimba", "Xylophone", "Tubular Bells", "Dulcimer"]
 """ Organ """;                  instruments += ["Drawbar Organ", "Percussive Organ", "Rock Organ", "Church Organ", "Reed Organ", "Accordion", "Harmonica", "Tango Accordion"]
@@ -23,8 +50,9 @@ import csv
 """ Percussive """;             instruments += ["Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko Drum", "Melodic Tom", "Synth Drum"]
 """ Sound effects """;          instruments += ["Reverse Cymbal", "Guitar Fret Noise", "Breath Noise", "Seashore", "Bird Tweet", "Telephone Ring", "Helicopter", "Applause", "Gunshot"]
 
-# Translate MIDI note numbers to internatinal note format
 notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
+
+# Translate MIDI note numbers to internatinal note format
 def note(note_number):
     return notes[note_number % 12] + str((note_number // 12) - 1)
 
@@ -43,12 +71,31 @@ def greatest_common_divisor(list):
         return a
     return reduce(gcd, list) # Return gcd(...(gcd(a,b),c))...)
 
-show_notes = False
+# Prints a vertical line with text on it to the standard output
+# Example: == Hello world! ==========================
+def print_seperator(seperator_char, text):
+   if len(text) != 0: text = " " + text + " "
+   print(seperator_char * 2 + text + seperator_char * (40-len(text)))
+
+# Prints a note sequence to the standard output
+def print_note_sequence(sequence):
+    print_seperator("-", "Sequence of length " + str(len(sequence)))
+    for i, t in enumerate(sequence):
+        if i % (4**3) == 0: print "=" + str(i) + "=",
+        elif i % (4**2) == 0: print "-" + str(i) + "-",
+        else: print "[" + str(i) + "]",
+        for n in t:
+            if timestamp_notes: print "(" + str(n[0]) + ")", note(n[1]),
+            else: print note(n),
+        print
+
+global_notes = []
 
 # Scans a midi file and returns a dictionary containing information about the file
 def scan(file, artist, genre):
     info = {}
-    midi = midiparser.File(file)
+    try: midi = midiparser.File(file)
+    except AssertionError: return # Return nothing if file could not be parsed
 
     info["filename"]          = file.lstrip(midi_library_path)
     info["artist"]            = artist
@@ -60,52 +107,48 @@ def scan(file, artist, genre):
     info["instrument_groups"] = []
     info["midi_format"]       = midi.format
 
+    song_notes = []
     for track in midi.tracks:
-        timings = []
-        if show_notes: print
+        track_notes = []
+        last = -1
         for event in track.events:
             if event.type == midiparser.voice.NoteOn:
-                pass
-                timings.append(event.absolute)
+                tick = int(round(event.absolute / (float(info["midi_division"] / discretization_granularity))))
+                if tick >= last + 1:
+                    if allow_gaps_in_sequences:
+                        for _ in range(int(round(tick)-round(last))): track_notes.append([])
+                    else:
+                        track_notes.append([])
+                    last = tick
+                if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
+                else: new_note = event.detail.note_no
+                track_notes[len(track_notes)-1].append(new_note)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
-                if show_notes: print note(event.detail.note_no),
             if event.type == midiparser.voice.ProgramChange:
                 if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
                 if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
             if event.type == midiparser.meta.SetTempo:
                 if event.detail.tempo not in info["tempo"]: info["tempo"].append(event.detail.tempo)
-            if event.type == midiparser.meta.InstrumentName:
-                if event.detail.text.strip() not in info["instruments"]: info["instruments"].append(event.detail.text.strip())
-            if event.type == midiparser.meta.TrackName:
-		pass #print "TrackName:", event.detail.text.strip()
-	    if event.type == midiparser.meta.CuePoint:
-		print "CuePoint:", event.detail.text.strip()
-	    if event.type == midiparser.meta.Lyric:
-		print "[Lyric]", event.detail.text.strip(),
-	    #if event.type == midiparser.meta.KeySignature:
-		# ...
-        if timings:
-            gcd = greatest_common_divisor(timings)
-            timings = [x / gcd for x in timings]
-            #print "gcd:", gcd, "-", timings
-            #print "(timing)"
+	    if event.type == midiparser.meta.KeySignature:
+		pass
+                #print "  KeySignature - Fifths:", event.detail.fifths, "Mode:", event.detail.mode
+            if event.type == midiparser.meta.TimeSignature:
+                pass
+                #print "  TimeSignature - Numerator:", event.detail.numerator, "Log_denominator:", event.detail.log_denominator, \
+                #"Midi_clocks:", event.detail.midi_clocks, "Thirty_seconds:", event.detail.thirty_seconds
+        if track_notes: song_notes.append(track_notes)
+    if song_notes: global_notes.append(song_notes)
     info["unknown_events"] = midi.UnknownEvents
     return info
 
-########################################################################################
-
-midi_library_path = '..\\data\\Library\\'
-output_filename = ''
-file_limit = -1 # Indicates how many files should be processed before stopping. -1 means that all files will be processed.
-
-def main(argv):
+# Processes files in library, one by one. Returns a count of the number of files processed.
+def process_files():
     # If no output_filename chosen, print to standard output, else to the chosen file
-    if output_filename: output = open(output_filename, 'wb') # output_filename given, use this
-    if not output_filename: output = sys.stdout # No output_filename given, use standard output
-    csv_writer = csv.writer(output, delimiter=';', quotechar='\"', quoting=csv.QUOTE_MINIMAL) # Create a CSV Writer instance for output
+    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
+    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
+    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
 
     # Scan all midi files in library. Directory format is expected to be \Genre\Artist\
-    first = True # Used for checking if this is the first file, and attribute headers therefore should be printed
     file_count = 0 # Counts the number of MIDI files processed
     for genre in os.listdir(midi_library_path): # Search all genre directories
         if genre[0] == ".": continue # Ignore hidden files
@@ -114,11 +157,38 @@ def main(argv):
                 if artist[0] == ".": continue # Ignore hidden files
                 for song in os.listdir(midi_library_path + genre + "\\" + artist): # Search for midi files in artist directory
                     if not os.path.isdir(midi_library_path + genre + "\\" + artist + "\\" + song): # Ignore any subpaths in artist directory
-                        file_count += 1
                         info = scan(midi_library_path + genre + "\\" + artist + "\\" + song, artist, genre) # Scan found midi file
-                        if first: csv_writer.writerow(info.keys()); first = False # Print attribute header if this is the first file
-                        csv_writer.writerow([value for key, value in info.items()]) # Print values
-                        if file_count == file_limit: return # If file_count limit reached, stop scanning
+                        if not info: # Skip files with errors
+                            print "Error in MIDI file, skipped. (" + genre + "\\" + artist + "\\" + song + ")"
+                            break
+                        if file_count == 0: csv_writer.writerow(info.keys()); # Print attribute header if this is the first file
+                        file_count += 1
+                        # Write data using csv writer. If type is list, remove the enclosing "[" and "]" before writing.
+                        csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in info.items()]) # Print values
+                        if file_count == file_limit: return file_count # If file_count limit reached, stop scanning
+    return file_count
 
 if __name__ == "__main__":
-    main(sys.argv)
+    start_time = time.time() # Remember starting time
+    file_count = process_files() # Do file processing
+    elapsed = (time.time() - start_time) # Compute processing time
+
+    print_seperator("=", "Done.")
+
+    # Display number of files processed and time elapsed in easily readable format
+    m, s = divmod(elapsed, 60)
+    h, m = divmod(m, 60)
+    print file_count, "files processed in",
+    if h: print int(h), "hours,",
+    if m: print int(m), "minutes and",
+    if s: print "%.2f seconds." % s
+
+    # Determine and print size of data structure containing note sequences
+    # Print a selected number of note sequences to standard output
+    sequence_size, sequence_count = 0, 0
+    for song in global_notes:
+        for track in song:
+            if sequence_count < print_note_sequences: print_note_sequence(track)
+            sequence_count += 1
+            sequence_size += sys.getsizeof(track)
+    print "Size of note sequence data structure in memory:", sequence_size // 1024.0**2, "MiB"
