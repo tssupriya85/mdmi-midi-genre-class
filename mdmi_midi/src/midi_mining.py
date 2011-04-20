@@ -142,7 +142,7 @@ def scan(file, artist, genre):
     return info
 
 # Processes files in library, one by one. Returns a count of the number of files processed.
-def process_files():
+def process_files(write_csv=True):
     # If no output_filename chosen, print to standard output, else to the chosen file
     if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
     if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
@@ -161,16 +161,16 @@ def process_files():
                         if not info: # Skip files with errors
                             print "Error in MIDI file, skipped. (" + genre + "\\" + artist + "\\" + song + ")"
                             break
-                        if file_count == 0: csv_writer.writerow(info.keys()); # Print attribute header if this is the first file
+                        if write_csv and file_count == 0: csv_writer.writerow(info.keys()); # Print attribute header if this is the first file
                         file_count += 1
                         # Write data using csv writer. If type is list, remove the enclosing "[" and "]" before writing.
-                        csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in info.items()]) # Print values
+                        if write_csv: csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in info.items()]) # Print values
                         if file_count == file_limit: return file_count # If file_count limit reached, stop scanning
     return file_count
 
 if __name__ == "__main__":
     start_time = time.time() # Remember starting time
-    file_count = process_files() # Do file processing
+    file_count = process_files(write_csv=False) # Do file processing
     elapsed = (time.time() - start_time) # Compute processing time
 
     print_seperator("=", "Done.")
