@@ -38,15 +38,6 @@ class Prefixspan:
             tabu = []
             for seq in songs:
                 for item in seq:                                #take open projected sequences into account!!!!!
-                    if len(seq[seq.index(item):]) > 1:
-                        if str(item) + '_' not in freq:
-                            freq[str(item) + '_'] = 1
-                            tabu.append(str(item) + '_')
-                        elif str(item) + '_' in tabu:
-                            continue
-                        else:
-                            freq[str(item) + '_'] += 1
-                            tabu.append(str(item) + '_')
                     if item not in freq:                        #items in general
                         freq[item] = 1
                         tabu.append(item)
@@ -76,48 +67,11 @@ class Prefixspan:
             freq2 = []
             a_p = []
             for x in a:
-                #if len(prefix) == l:
-                    #for x in a:
-                        #print 'appending to prefix: ' + str(x)
                 if len(x) == l:
                     a_p = [x + [k] for k, v in freq.items()]    #concatenate each frequent sequence with the frequent items from projected database
                     freq2 = [((x+[k]), v) for k, v in freq.items()]
-                    """for k,v in freq.items():
-                        print 'k: ' + str(k)
-                        if str(k).startswith('_') == True:                                  #The item can be assembled with
-                            if str(prefix[len(prefix)-1]).endswith('_') == True:
-                                print 'prefix[l-1:l] ' + str(prefix[l-1:l])#[0])[:-1]
-                                temp = [int(str(prefix[l-1:l][0])[:-1])] + [int(k[1:])]     #Remove _ from '_k' and from 'prefix_'
-                            else:
-                                temp = prefix[l-1:] + [int(k[1:])]                          #Remove _ only from '_k'
-                            print 'popping from prefix: ' + str(prefix.pop(l-1))
-                            print 'appending to prefix: ' + str(temp)
-                            a_p.append(prefix + temp) #prefix.append(temp)
-                            temp2 = (temp, v)
-                            freq2.append(temp2)
-                        elif str(k).endswith('_') == True:
-                            if str(prefix[len(prefix)-1]).endswith('_') == True:
-                                print prefix
-                                print 'prefix[l-1:l] ' + str(prefix[l-1:l])#[0])[:-1]
-                                temp = [int(str(prefix[l-1:l][0])[:-1])] + [k]#[int(k[1:])]# : v
-                                print 'popping from prefix: ' + str(prefix.pop(l-1))
-                                print 'appending to prefix: ' + str(temp)
-                                a_p.append(prefix + temp) #prefix.append(temp)
-                                temp2 = (temp, v)
-                            else:
-                                temp = [k]
-                                #temp = k
-                                a_p.append(prefix + temp) # prefix.append(temp)
-                                temp2 = (temp, v)
-                            freq2.append(temp2)
-                        else:
-                            temp = [k]
-                            #temp = k
-                            print 'appending to prefix: ' + str(temp)
-                            a_p.append(prefix + temp)# prefix.append(temp)
-                            temp2 = (temp, v)
-                            freq2.append(temp2)
-                        #a_p.append(temp)"""
+                    print 'a_p: ' + str(a_p)
+                    print 'freq2: ' + str(freq2)
                     print 'new partitioned prefixes (alpha prime sequences): ' + str(a_p)
         if not not freq2:                                       #as long as freq2 is not empty, append it to the overall list of frequent sequences
             [self.seq_pats.append(pattern) for pattern in freq2]
@@ -138,33 +92,20 @@ class Prefixspan:
                         try:
                             i = seq.index(k)
                             b = False
-                            #print 'k,i: ' + str(k) + ', ' + str(i)
-                        except:
-                            #print 'exception'
-                            if str(k).endswith('_'):
-                                try:
-                                    #print 'trying'
-                                    i = seq.index(int(k[:len(k)-1]))
-                                    if len(seq[i + 1:]) > 0:
-                                        j = seq[i + 1:]
-                                        j[0] = '_'+str(j[0])
-                                        s.append(j)
-                                except:
-                                    #print 'failing'
-                                    continue
-                            else:
-                                continue
-                        if len(seq[i + 1:]) > 0:# and song.index(seq) == 0:
+                            if len(seq[i + 1:]) > 0:# and song.index(seq) == 0:
                             #print 'seq[i + 1:] ' + str(seq[i + 1:])
-                            j = seq[i + 1:]
-                            j[0] = '_'+str(j[0])
-                            s.append(j)                    #append all  items after i to temp
-                        else:
-                            pass#print ' single item sequence: ' + str(seq)
+                                j = seq[i + 1:]
+                                j[0] = '_'+str(j[0])
+                                s.append(j)
+                            else:
+                                print 'passing'
+                                pass
+                        except:
+                            print 'exception'
+                            continue
                     else:
                         s.append(seq)
                 if not not s:
-                    #print 's: ' + str(s)
                     a_proj.append(s)
             if not not a_proj:
                 suffix.append(a_proj)
@@ -172,7 +113,8 @@ class Prefixspan:
         The new alpha projected database are passed in recursive calls to the
         prefixspan method along with the new prefix of length l+1.
         '''
-        #print 'suffix: ' + str(suffix)
+        print 'suffix: ' + str(suffix)
         [self.prefixspan([alpha], l+1, a_proj_db) for (alpha, a_proj_db) in zip(a_p, suffix)]
+
 if __name__ == "__main__":
     main()
