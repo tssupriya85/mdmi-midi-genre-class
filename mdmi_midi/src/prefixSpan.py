@@ -61,7 +61,7 @@ class Prefixspan:
             if v < self.supp:
                 #print 'Deleting k, v from freq: ' + str(k) + ', ' + str(v)
                 del freq[k]                                     #array is iterated and frequent distinct length-1 sequential patterns are found
-        #print 'FREQUENT ITEMS ' + str(freq)
+        print 'FREQUENT ITEMS ' + str(freq)
         '''
         All frequent items are appended to the prefix sequence alpha' (a_p) to
         be used for later generation of frequent sequences of length l+1.
@@ -70,15 +70,20 @@ class Prefixspan:
         '''
         if l == 0:
             a_p = [a + [k] for k, v in freq.items()]            #concatenate a with frequent items to generate new frequent sequential patterns of length 1
-            #print 'a_p - 0: ' + str(a_p)
+            print 'a_p - 0: ' + str(a_p)
             freq2 = [([k], v) for k, v in freq.items()]
-            #print 'freq2 - 0: ' + str(freq2)
+            print 'freq2 - 0: ' + str(freq2)
         else:
             freq2 = []
             a_p = []
             for prefix in a:
                 if len(prefix) == l:
-                    for k,v in freq.items():
+                    for x in a:
+                        print 'appending to prefix: ' + str(x)
+                        if len(x) == l:
+                            a_p = [x + [k] for k, v in freq.items()]    #concatenate each frequent sequence with the frequent items from projected database
+                            freq2 = [((x+[k]), v) for k, v in freq.items()]
+                    """for k,v in freq.items():
                         print 'k: ' + str(k)
                         if str(k).startswith('_') == True:                                  #The item can be assembled with
                             if str(prefix[len(prefix)-1]).endswith('_') == True:
@@ -88,7 +93,7 @@ class Prefixspan:
                                 temp = prefix[l-1:] + [int(k[1:])]                          #Remove _ only from '_k'
                             print 'popping from prefix: ' + str(prefix.pop(l-1))
                             print 'appending to prefix: ' + str(temp)
-                            prefix.append(temp)
+                            a_p.append(prefix + temp) #prefix.append(temp)
                             temp2 = (temp, v)
                             freq2.append(temp2)
                         elif str(k).endswith('_') == True:
@@ -98,22 +103,22 @@ class Prefixspan:
                                 temp = [int(str(prefix[l-1:l][0])[:-1])] + [k]#[int(k[1:])]# : v
                                 print 'popping from prefix: ' + str(prefix.pop(l-1))
                                 print 'appending to prefix: ' + str(temp)
-                                prefix.append(temp)
+                                a_p.append(prefix + temp) #prefix.append(temp)
                                 temp2 = (temp, v)
                             else:
-                                #temp = prefix + [k]
-                                temp = k
-                                prefix.append(temp)
-                                temp2 = (prefix, v)
+                                temp = [k]
+                                #temp = k
+                                a_p.append(prefix + temp) # prefix.append(temp)
+                                temp2 = (temp, v)
                             freq2.append(temp2)
                         else:
-                            #temp = prefix + [k]
-                            temp = k
+                            temp = [k]
+                            #temp = k
                             print 'appending to prefix: ' + str(temp)
-                            prefix.append(temp)#temp)
-                            temp2 = (prefix, v)
+                            a_p.append(prefix + temp)# prefix.append(temp)
+                            temp2 = (temp, v)
                             freq2.append(temp2)
-                        a_p.append(temp)
+                        #a_p.append(temp)"""
                     print 'new partitioned prefixes (alpha prime sequences): ' + str(a_p)
             if not not freq2:                                       #as long as freq2 is not empty, append it to the overall list of frequent sequences
                 [self.seq_pats.append(pattern) for pattern in freq2]
