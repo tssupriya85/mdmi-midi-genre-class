@@ -36,7 +36,6 @@ class Prefixspan:
         freq = {}
         for songs in S:
             tabu = []
-            tabu_as = []
             for seq in songs:
                 for item in seq:                                #take open projected sequences into account!!!!!
                     if len(seq[seq.index(item):]) > 1:
@@ -76,13 +75,13 @@ class Prefixspan:
         else:
             freq2 = []
             a_p = []
-            for prefix in a:
-                if len(prefix) == l:
-                    for x in a:
-                        print 'appending to prefix: ' + str(x)
-                        if len(x) == l:
-                            a_p = [x + [k] for k, v in freq.items()]    #concatenate each frequent sequence with the frequent items from projected database
-                            freq2 = [((x+[k]), v) for k, v in freq.items()]
+            for x in a:
+                #if len(prefix) == l:
+                    #for x in a:
+                        #print 'appending to prefix: ' + str(x)
+                if len(x) == l:
+                    a_p = [x + [k] for k, v in freq.items()]    #concatenate each frequent sequence with the frequent items from projected database
+                    freq2 = [((x+[k]), v) for k, v in freq.items()]
                     """for k,v in freq.items():
                         print 'k: ' + str(k)
                         if str(k).startswith('_') == True:                                  #The item can be assembled with
@@ -120,8 +119,8 @@ class Prefixspan:
                             freq2.append(temp2)
                         #a_p.append(temp)"""
                     print 'new partitioned prefixes (alpha prime sequences): ' + str(a_p)
-            if not not freq2:                                       #as long as freq2 is not empty, append it to the overall list of frequent sequences
-                [self.seq_pats.append(pattern) for pattern in freq2]
+        if not not freq2:                                       #as long as freq2 is not empty, append it to the overall list of frequent sequences
+            [self.seq_pats.append(pattern) for pattern in freq2]
         '''
         The new projected database (suffix) are generated. Here the currently
         alpha projected db are reduced to contain only items subsequent to the
