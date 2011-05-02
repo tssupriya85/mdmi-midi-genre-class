@@ -18,10 +18,12 @@ discretization_granularity = 4
 
 """ File loader configuration """
 
-midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # Path of midi library. Should be set to local MDMI Dropbox folder
+# Path of midi library. Should be set to local MDMI Dropbox folder
+#midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
+midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 output_filename = '' # No filename means print to standard output
-file_limit = 25 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
-print_note_sequences = 5 # Prints x first note sequences when done processing MIDI files
+file_limit = 5 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
 
@@ -170,7 +172,7 @@ def process_files(write_csv=True):
 
 if __name__ == "__main__":
     start_time = time.time() # Remember starting time
-    file_count = process_files(write_csv=False) # Do file processing
+    file_count = process_files(write_csv=True) # Do file processing
     elapsed = (time.time() - start_time) # Compute processing time
 
     print_seperator("=", "Done.")
