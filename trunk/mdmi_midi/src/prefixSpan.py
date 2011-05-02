@@ -28,110 +28,104 @@ class Prefixspan:
         sequence are taken into account.
         Items with a support count larger than the minimum support requirements
         (supp) are kept in a datastructure freq holding item and supportcount.
+        When considering sequences we differ between individual items and
+        subsets with multiple items (i.e. individual items and items part of a
+        subsequence of items). Items in longer subsequences are events that happens
+        concurrently.
         '''
 
-        #print 'alpha (prefix) passed: ' + str(a)
-        #print 'length \'l\' passed: ' + str(l)
-        #print 'S_a (alphaprojected db) passed: ' + str(S)
         print 'S: ', S
+        #Base case for recursion
         if not S:
-            return a                                            #base case for recursion
+            return a
 
-        freq = {}
-        _freq = {}
-        for songs in S:
+        freq = {}  # Initialize frequent item list for singular items
+        _freq = {} # Initialize frequent item list for concatenatable items
+
+        for songs in S: # Iterate the projected database to find frequent items
             tabu = []
             _tabu = []
             for num, seq in enumerate(songs):
                 isInSeq = False
                 for no, item in enumerate(seq):
-                    if len(a) > 0 and item == a[-1:][0]:#[0]:     #Testing if the current item is equal to the last item in alpha
-                        isInSeq = True                          #If that is the case, seq is eligible for assembly items
+                    # First check if the first sequence in the projected database is already part of a
+                    # potentially concatenatable sequence and if that sequence has more items left for
+                    # concatenation. If that is the case, check the first sequence for frequent concatenatable
+                    # items.
+                    # If this is not the case, than alternatively check if the last item in the prefix
+                    # is equal to the current item and again only consider the first sequence and only if
+                    # the first residual sequence after the item matching the last item in the prefix is
+                    # larger than 0.
+                    # The reason for this check is to ensure that concatanatable items are counted correctly
+                    # (i.e. we wish to avoid overlooking items that has an incorrectly low support count).
                     length_residual_seq = len(seq[seq.index(item)+1:])
-                    if (len(a) > 0 and isInSeq and length_residual_seq > 0 and num == 0) or (seq[0] == '_' and length_residual_seq > 0 and num == 0): #item == '_':
-                        # if a is not empty, the item is equal to the last element of a
-                        #and if there are still items left in that sequence
-                        #(i.e. an item immediately to the right of the current item)
-                        #Implement something to handle assembly items (i.e. iterate through items and find
-                            #print 'seq', seq
-                            #print 'seq[seq.index(item)+1:]', seq[seq.index(item)+1:], seq.index(item)+1
+                    if (seq[0] == '_' and length_residual_seq > 0 and num == 0)\
+                    or (len(a) > 0 and item == a[-1:][0] and length_residual_seq > 0 and num == 0):
+                        #Add item to _freq and increment count to 1, if the is not already in the frequent item list
                         if seq[seq.index(item)+1] not in _freq:
-                            _freq[seq[seq.index(item)+1]] = 1                   #Add item to _freq
-                        elif item in _tabu:                                     #Only consider the first element in the sequence
+                            _freq[seq[seq.index(item)+1]] = 1 
+                        #Only consider the first element in the sequence.
+                        elif item in _tabu:
                             continue
                         else:
-                            _freq[seq[seq.index(item)+1]] += 1                  #Increment support count
+                            _freq[seq[seq.index(item)+1]] += 1                  
                             _tabu.append(item)
-                    if no < 2 and num == 0 and seq[0] == '_':#no < 2 and                    #disregard assemble marker '_' and the
-                        continue                                                #first element in the first sequence in a
 
-                    if item not in freq:                                        #Other items not applying to the above
-                        #print 'new freq item: ', item, freq, seq
+                    # Next step is to check for individual frequent items
+                    # These items are not the same as the assembly items, and
+                    # we therefore need to disregard items in the sequence  that
+                    # is considered concatenatable items.
+                    # SHOULD THE ENTIRE SEQUENCE BE DISREGARDED????
+                    if no < 2 and num == 0 and seq[0] == '_':
+                        continue
+                    # After disregarding concatenatable items, items are appended to
+                    # a frequent list in the same way as concatenatable items are
+                    if item not in freq:                                        
                         freq[item] = 1
                         tabu.append(item)
-                    elif item in tabu:       #tabu is used to ensure that only the first item in each sequence is taken into account
+                    elif item in tabu:                            
                         continue
                     else:
-                        #print 'increment freq item: ', item, freq, seq
                         freq[item] += 1
                         tabu.append(item)
 
-        #print 'FREQ BEFORE PRUNING', freq
-        #print '_FREQ BEFORE PRUNING', _freq
-
-        for k, v in freq.items():
+        # Items that does not have the required frequent support count are pruned from the frequent item lists.
+        for k, v in freq.items():                                              
             if v < self.supp:
                 del freq[k]
 
-        for k, v in _freq.items():
+        for k, v in _freq.items():                                              
             if v < self.supp:
                 del _freq[k]
-
-        print 'FREQ', freq
-        print '_FREQ', _freq
 
         '''
         All frequent items are appended to the prefix sequence alpha' (a_p) to
         be used for later generation of frequent sequences of length l+1.
         Furthermore frequent sequences of length l are appended to the set of
-        all frequent sequences (seq_pats)
+        all frequent sequences (seq_pats). The same goes for frequent concatenatable
+        items. Since concatenatable items obviously does not apply when l = 0, only
+        individual items are considered and appended to the list of sequential patterns.
         '''
 
         if l == 0:
-            a_p = [a + [k] for k, v in freq.items()]            #concatenate a with frequent items to generate new frequent sequential patterns of length 1
+            a_p = [a + [k] for k, v in freq.items()] 
             freq2 = [([k], v) for k, v in freq.items()]
             _a_p = []
-            _freq2 = []
-            #No frequent assemble items in first iteration
+            _freq2 = []                                                         
         else:
-            a_p = [a + [k] for k, v in freq.items()]    #concatenate each frequent sequence with the frequent items from projected database
-            freq2 = [(a + [k], v) for k, v in freq.items()] # replace a with x
+            a_p = [a + [k] for k, v in freq.items()]                            
+            freq2 = [(a + [k], v) for k, v in freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
+            _a_p = [a[:-1] + [a[-1:] + [k]] for k, v in _freq.items()] # last item in a-prefix are concatenated with frequent item.
+            _freq2 = [(a[:-1] + [a[-1:] + [k]], v) for k, v in _freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
 
-            #print 'a: ', a
-            #print 'a[-1:] ', a[-1:]
-            #print 'a[:-1] ', a[:-1]
-
-            _a_p = [a[:-1] + [a[-1:] + [k]] for k, v in _freq.items()]
-            _freq2 = [(a[:-1] + [a[-1:] + [k]], v) for k, v in _freq.items()]
-            '''_a_p = []
-            _freq2 = ()
-            for k, v in _freq.items():
-                _a_p = _a_p + a[:-1] + [a[-1:] + [k]]
-                if not _freq2:
-                    _freq2 = [(a[:-1] + [a[-1:] + [k]], v)]
-                else:
-                    _freq2 = _freq2, [( a[:-1] + [a[-1:] + [k]], v )]'''
-
-            #print 'a_p, freq2: ', a_p, freq2
-            #print '_a_p, _freq2: ', _a_p, _freq2
-            #print 'new partitioned prefixes (alpha prime sequences): ' + str(a_p)
-
-        if not not freq2:                                       #as long as freq2 is not empty, append it to the overall list of frequent sequences
+        # If the concatenated frequent item lists are not empty, then append them to the overall list of frequent sequential patterns
+        if not not freq2:
             [self.seq_pats.append(pattern) for pattern in freq2]
         if not not _freq2:
             [self.seq_pats.append(pattern) for pattern in _freq2]
+
         '''
-        The new projected database (suffix) are generated. Here the currently
+        The new projected database (suffixDB and _suffixDB) are generated. Here the currently
         alpha projected db are reduced to contain only items subsequent to the
         current frequent item, thus iteratively reducing the size of the alpha
         projected db.
@@ -139,11 +133,17 @@ class Prefixspan:
 
         print 'a_p: ', a_p
         print '_a_p: ', _a_p
-        #print 'S: ', S
         suffixDB = []
         _suffixDB = []
 
-        #for alpha in a_p:                              #in practice not different from iterating over frequent items
+        # Iterating all items in frequent item list.
+        # For each item in the frequent item list, we find the first item in the sequence.
+        # If the sequence is prefixed with "_" we disregard it, as we are only looking for individual items.
+        # When the item in the frequent list is found, we append the residual sequence (if any) to the projected
+        # database along with a prefixed "_". All subsequent sequences after this, is appended to the projected
+        # database in their entirity.
+        # Finally the new build a-projected database, with respect to the frequent item k, is appended to a list
+        # of projected databases used in subsequent recursions.
         for k, v in freq.items():
             DB = []
             for song in S:
@@ -154,25 +154,32 @@ class Prefixspan:
                         continue
                     if itemNotFound:
                         try:
-                            #print 'seq for suffix creation: ', seq
                             i = seq.index(k)
                             itemNotFound = False
-                            if len(seq[i + 1:]) > 0:                            #if the subsequence in which the frequent item
-                                residual = ['_']+seq[i + 1:]                    #is resident has more items after the frequent
-                                #print 'residual: ', residual                    #item, then append the residual to the projected
-                                projectedDB.append(residual)                    #database. If not, ignore the sequence. (i.e. no else clause)
+                            if len(seq[i + 1:]) > 0:         # only if the sequence contains more items after the frequent item k, should
+                                residual = ['_']+seq[i + 1:] # the residual sequence be appended
+                                projectedDB.append(residual)                    
                         except:
-                            #print 'no match in subsequence, moving on to next subsequence'
                             continue
                     else:
-                        #print 'projectedDB before: ', projectedDB
                         projectedDB.append(seq)
-                        #print 'projectedDB after: ', projectedDB
                 if not not projectedDB:
                     DB.append(projectedDB)
-            if not not DB:#projectedDB:#DB:
-                suffixDB.append(DB)#projectedDB])
+            if not not DB:
+                suffixDB.append(DB)
 
+        # Iterating all items in the list of frequent concatenatable items
+        # The items in this list a treated differently than the other frequent items,
+        # as only items that are part of a larger subsequence (i.e. subsequence of length at least 2)
+        # If the item is found in the subsequence, and the subsequence is the first subsequence in the
+        # sequence and the frequent item k is not the first item in the sequence (i.e. the first item in the
+        # subsequence will always be "_"), then we consider the item to be found, and we can append the suffix
+        # to a build of the projected database with respect to that frequent item. If such an item does not exist,
+        # then the projected database will just be empty (itemNotFound will continue to be true).
+        # If the item is found however, and it is found in the first subsequence, then we have found the correct
+        # item that is eligible for concatenation. itemNotFound will be set to False, an the residual subsequence
+        # will be added, if any. All subsequent individual items or subsequences will be appended to the new projected
+        # database as well.
         for k, v in _freq.items():
             DB = []
             for song in S:
@@ -181,39 +188,31 @@ class Prefixspan:
                 for num, seq in enumerate(song):
                     if itemNotFound and len(seq) > 1:
                         try:
-                            #print 'seq for suffix creation: ', seq
-                            #print 'k: ', k
                             i = seq.index(k)
-                            print 'found k at index (k,i): ', k, i
-                            print 'a is: ', a
-                            if num == 0 and i != 0:             #Only if we are in the first sequence and the first item
-                                itemNotFound = False            #in that sequence is not the key item is the item truly found (i.e. the correct assembly item)
-                            if itemNotFound == False and len(seq[i + 1:]) > 0:                            #if the subsequence in which the frequent item
-                                #itemNotFound = False
-                                residual = ['_']+seq[i + 1:]                    #is resident has more items after the frequent
-                                #print '_residual: ', residual                    #item, then append the residual to the projected
-                                projectedDB.append(residual)                    #database. If not, ignore the sequence. (i.e. no else clause)
+                            if num == 0 and i != 0:  # Only if item is found in the first subsequence, and it is not
+                                itemNotFound = False # the first item, can we claim that we found the right concatenatable item
+                            if itemNotFound == False and len(seq[i + 1:]) > 0:                            
+                                residual = ['_']+seq[i + 1:]  # only append if the residual subsequence contains at least 1 more item
+                                projectedDB.append(residual)
+                            # If item is never found, do nothing, therefore no elif clause.
                         except:
-                            #print 'no match in subsequence, moving on to next subsequence'
                             continue
                     elif itemNotFound == False:
-                        #continue
-                        #print 'projectedDB before: ', projectedDB
                         projectedDB.append(seq)
-                        #print 'projectedDB after: ', projectedDB
                 if not not projectedDB:
                     DB.append(projectedDB)
-            if not not DB:#projectedDB:#DB:
-                _suffixDB.append(DB)#projectedDB])
+            if not not DB:
+                _suffixDB.append(DB)
 
         '''
         The new alpha projected database are passed in recursive calls to the
         prefixspan method along with the new prefix of length l+1.
+        Since the alpha projected database shrinks with each recursion, the algorithm
+        terminates when reaching the base case (when the projected database is empty)
         '''
 
-        print 'suffix: ', suffixDB
-        print '_suffix: ', _suffixDB
         [self.prefixspan(alpha, l+1, S_a) for (alpha, S_a) in zip(a_p, suffixDB)]
         [self.prefixspan(alpha, l+1, S_a) for (alpha, S_a) in zip(_a_p, _suffixDB)]
+
 if __name__ == "__main__":
     main()
