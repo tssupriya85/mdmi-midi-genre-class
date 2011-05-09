@@ -203,8 +203,10 @@ class Prefixspan:
         terminates when reaching the base case (when the projected database is empty)
         '''
 
-        [self.prefixspan(alpha, l+1, S_a) for (alpha, S_a) in zip(a_new, suffixDB)]
-        [self.prefixspan(alpha, l+1, S_a) for (alpha, S_a) in zip(_a_new, _suffixDB)]
+        for (alpha, S_a) in zip(a_new, suffixDB):
+            self.prefixspan(alpha, l+1, S_a)
+        for (alpha, S_a) in zip(_a_new, _suffixDB):
+            self.prefixspan(alpha, l+1, S_a)
 
 if __name__ == "__main__":
     main()
