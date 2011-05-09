@@ -17,16 +17,25 @@ def main():
     # Another (simple) test database
     p3 = [ [ [0, 0], [1, 1], [2, 2] ], [ [0, 0], [1, 1], [2, 2] ] ]
     
-    for seq in p2:
+    # Choose your database ...
+    input = p2
+
+    # Print chosen database
+    print "Input:"
+    for seq in input:
         print seq
     print
+
     # Run algorithm
-    pfs = frequent_patterns(p2, 2)
+    pfs = frequent_patterns(input, 2)
+
+    # Print result
+    print "Result:"
     for sequence, support in pfs:
         print sequence, ":", support
 
 
-# Returns all frequent patterns with minimum support of sequence database S
+# Returns all frequent patterns with minimum support from sequence database S
 def frequent_patterns(S, min_support):
     # Recursive PrefixSpan sequence pattern mining algorithm
     def prefixspan(a, l, S):
@@ -42,13 +51,17 @@ def frequent_patterns(S, min_support):
                 if item not in freq: freq[item] = 1
                 else: freq[item] += 1
 
-        freq = dict((k,v) for k, v in freq.items() if v >= min_support) # Prune items with support below minimum
-        a_new = [a + [list(k)] for k, v in freq.items()] # Frequent items are appended to a to get a'
-        freq_new = [(a + [list(k)], v) for k, v in freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
+        # Prune items with support below minimum
+        freq = dict((k,v) for k, v in freq.items() if v >= min_support)
 
-        # If the concatenated frequent item lists are not empty, then append them to the overall list of frequent sequential patterns
-        if freq_new:
-            for pattern in freq_new: sequence_patterns.append(pattern)
+        # Frequent items are appended to a to get a'
+        a_new = [a + [list(k)] for k, v in freq.items()]
+
+        # Concatenate frequent list to get frequent list of l+1 sequences
+        freq_new = [(a + [list(k)], v) for k, v in freq.items()]
+
+        # Append new frequent items to the overall list of frequent sequential patterns
+        for pattern in freq_new: sequence_patterns.append(pattern)
 
         ''' [KOMMENDE GAP TILF0JELSE]: Hvis ingen projected database skabes, skal der s0ges fremad for at se om prefix kommer senere '''
         # Construct projected databases S|a'
@@ -58,7 +71,8 @@ def frequent_patterns(S, min_support):
             for sequence in S:
                 if prefix[-1] in sequence:
                     if len(sequence[sequence.index(prefix[-1])+1:]) > 0: suffix.append(sequence[sequence.index(prefix[-1])+1:])
-            if suffix: prefix_suffix.append((prefix, suffix))
+            if suffix:
+                prefix_suffix.append((prefix, suffix))
 
         # Recurse on projected database(s)
         for prefix, suffix in prefix_suffix:
