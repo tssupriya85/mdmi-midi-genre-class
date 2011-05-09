@@ -19,10 +19,10 @@ discretization_granularity = 4
 """ File loader configuration """
 
 # Path of midi library. Should be set to local MDMI Dropbox folder
-#midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
-midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
+midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
+#midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 output_filename = '' # No filename means print to standard output
-file_limit = 5 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+file_limit = 1000 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -33,6 +33,7 @@ import os
 import csv
 import time
 import types
+import prefixSpan_noassembly_gap
 
 """ ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
@@ -194,3 +195,51 @@ if __name__ == "__main__":
             sequence_count += 1
             sequence_size += sys.getsizeof(track)
     print "Sequence data structure contains", sequence_count, "sequences, and uses", sequence_size // 1024.0**2, "MiB of memory."
+
+# PREFIX_SPAN FUN
+
+    print_input = False
+
+    input = [item for sublist in global_notes for item in sublist] # Toss all sequences into one big list (no song division anymore)
+
+    # Print chosen database
+    if print_input:
+        print "Input:"
+        for seq in input:
+            print seq
+        print
+
+    min_support = file_limit / 10 + 10
+
+    print "Mining sequences with minimum support", min_support
+
+    start_time = time.time() # Remember starting time
+    frequent_sequences = prefixSpan_noassembly_gap.frequent_sequences(input, min_support) # Run algorithm
+    elapsed = (time.time() - start_time) # Compute processing time
+
+    print_seperator("=", "Done mining sequences.")
+
+    # Display number of files processed and time elapsed in easily readable format
+    m, s = divmod(elapsed, 60)
+    h, m = divmod(m, 60)
+    print len(frequent_sequences), "frequent sequences mined in",
+    if h: print int(h), "hours,",
+    if m: print int(m), "minutes and",
+    if s: print "%.2f seconds." % s
+
+
+    def all_same(items):
+        return all(x == items[0] for x in items)
+
+    # Print result
+    print "Result:"
+    unprinted = 0
+    for sequence, support in frequent_sequences:
+        if len(sequence) < 4 or not all_same(sequence):
+            print sequence, ":", support
+        else:
+            unprinted += 1
+    if unprinted > 0: print unprinted, "size (>4) sequences ignored since they contained only repetitions of the same element."
+
+
+
