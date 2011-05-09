@@ -2,28 +2,32 @@
 __author__ = "Perry D Christensen"
 __date__ = "$18-04-2011 14:13:20$"
 
+#import itertools
+import midi_mining
+
 # Main method
 def main():
-    # This database is identical to that of the example in the book (letters replaced with integers)
-    p1 = [[[1], [1, 2, 3], [1, 3], [4], [3, 6]], [[1, 4], [3], [2, 3], [1, 5]], [[5, 6], [1, 2], [4, 6], [3], [2]], [[5], [7], [1, 6], [3], [2], [3]]]
+    print_input = False
 
-    # More interesting example (for this simplified version without assembly)
-    p2 = [[[9], [9], [4], [2], [3], [4], [4], [4], [2]], [[2], [3], [4], [3], [2]], [[2], [3], [9], [4]], [[7], [2], [3], [4], [2], [3], [4], [2], [4], [4], [4], [3], [4]]]
+    print "Processing MIDI files..."
+    midi_mining.process_files(write_csv=False) # Asks midi_mining to process MIDI files
+    print "Done."
 
-    # Another (simple) test database
-    p3 = [ [ [0, 0], [1, 1], [2, 2] ], [ [0, 0], [1, 1], [2, 2] ] ]
+    input = [item for sublist in midi_mining.global_notes for item in sublist] # Toss all sequences into one big list (no song division anymore)
 
-    # Choose your database ...
-    input = p2
+    # Example of using global_notes: Print all sequences
+#    for track in input:
+#        midi_mining.print_note_sequence(track)
 
     # Print chosen database
-    print "Input:"
-    for seq in input:
-        print seq
-    print
+    if print_input:
+        print "Input:"
+        for seq in input:
+            print seq
+        print
 
     # Run algorithm
-    pfs = frequent_sequences(input, 2)
+    pfs = frequent_sequences(input, 5)
 
     # Print result
     print "Result:"
@@ -54,7 +58,7 @@ def frequent_sequences(S, min_support):
 
         # Prune items with support below minimum
         freq = dict((k,v) for k, v in freq.items() if v >= min_support)
-        
+
         # Frequent items are appended to a to get a'
         a_new = [a + [list(k)] for k, v in freq.items()]
 

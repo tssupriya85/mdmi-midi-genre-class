@@ -12,13 +12,13 @@ def main():
     p1 = [[[1], [1, 2, 3], [1, 3], [4], [3, 6]], [[1, 4], [3], [2, 3], [1, 5]], [[5, 6], [1, 2], [4, 6], [3], [2]], [[5], [7], [1, 6], [3], [2], [3]]]
 
     # More interesting example (for this simplified version without assembly)
-    p2 = [[[1], [2], [3,4], [5]], [[0], [1], [2], [3,4], [7]], [[2], [3,4]]]
+    p2 = [[[1], [2], [3,4], [5]], [[0], [1], [7], [2], [3,4], [7]], [[2], [3,4]]]
 
     # Another (simple) test database
     p3 = [ [ [0, 0], [1, 1], [2, 2] ], [ [0, 0], [1, 1], [2, 2] ] ]
     
     # Choose your database ...
-    input = p2
+    input = p3
 
     # Print chosen database
     print "Input:"
