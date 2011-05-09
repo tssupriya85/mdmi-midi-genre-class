@@ -20,7 +20,7 @@ class Prefixspan:
         self.freq = self.prefixspan([], 0, self.S)
         print 'List of frequent sequences:'
         for sequence, support in self.seq_pats:
-            print sequence,":",support
+            print sequence, ":", support
         # Check for no fuckups in refactoring
         assert self.seq_pats == [([1], 4), ([2], 4), ([3], 4), ([4], 3), ([5], 3), ([6], 3), ([1, 1], 2), ([1, 2], 4), ([1, 3], 4), ([1, 4], 2), ([1, 6], 2), ([[1, 2]], 2), ([1, 2, 1], 2), ([1, 2, 3], 2), ([1, [2, 3]], 2), ([1, [2, 3], 1], 2), ([1, 3, 1], 2), ([1, 3, 2], 3), ([1, 3, 3], 3), ([1, 4, 3], 2), ([[1, 2], 3], 2), ([[1, 2], 4], 2), ([[1, 2], 6], 2), ([[1, 2], 4, 3], 2), ([2, 1], 2), ([2, 3], 3), ([2, 4], 2), ([2, 6], 2), ([[2, 3]], 2), ([2, 4, 3], 2), ([[2, 3], 1], 2), ([3, 1], 2), ([3, 2], 3), ([3, 3], 3), ([4, 2], 2), ([4, 3], 3), ([4, 3, 2], 2), ([5, 1], 2), ([5, 2], 2), ([5, 3], 2), ([5, 6], 2), ([5, 1, 2], 2), ([5, 1, 3], 2), ([5, 1, 3, 2], 2), ([5, 2, 3], 2), ([5, 3, 2], 2), ([5, 6, 2], 2), ([5, 6, 3], 2), ([5, 6, 3, 2], 2), ([6, 2], 2), ([6, 3], 2), ([6, 2, 3], 2), ([6, 3, 2], 2)]
 
@@ -106,14 +106,13 @@ class Prefixspan:
         individual items are considered and appended to the list of sequential patterns.
         '''
 
+        a_new = [a + [k] for k, v in freq.items()]
+        freq_new = [(a + [k], v) for k, v in freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
+
         if l == 0: # Ingen underscore items
-            a_new = [a + [k] for k, v in freq.items()]
-            freq_new = [(a + [k], v) for k, v in freq.items()]
             _a_new = []
             _freq_new = []
         else:
-            a_new = [a + [k] for k, v in freq.items()]
-            freq_new = [(a + [k], v) for k, v in freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
             _a_new = [a[:-1] + [a[-1:] + [k]] for k, v in _freq.items()] # last item in a-prefix are concatenated with frequent item.
             _freq_new = [(a[:-1] + [a[-1:] + [k]], v) for k, v in _freq.items()] # Concatenate frequent list to get frequent list of l+1 sequences
 
@@ -136,8 +135,7 @@ class Prefixspan:
         _suffixDB = []
 
         """
-        # Iterating all items in frequent item list.
-        # For each item in the frequent item list, we find the first item in the sequence.
+        # Iterating all items in frequent item list.first item in the sequence.
         # If the sequence is prefixed with "_" we disregard it, as we are only looking for individual items.
         # When the item in the frequent list is found, we append the residual sequence (if any) to the projected
         # database along with a prefixed "_". All subsequent sequences after this, is appended to the projected
@@ -147,27 +145,22 @@ class Prefixspan:
         """
         for k, v in freq.items():
             DB = []
-            for song in S:
+            for sequence in S:
                 projectedDB = []
                 itemNotFound = True
-                for item in song:
-                    if item[0] == '_':
-                        continue
+                for item in sequence:
+                    if item[0] == '_': continue
                     if itemNotFound:
                         try:
                             i = item.index(k)
                             itemNotFound = False
-                            if len(item[i + 1:]) > 0:         # only if the sequence contains more items after the frequent item k, should
-                                residual = ['_']+item[i + 1:] # the residual sequence be appended
+                            if len(item[i + 1:]) > 0:           # only if the sequence contains more items after the frequent item k, should
+                                residual = ['_'] + item[i + 1:] # the residual sequence be appended
                                 projectedDB.append(residual)                    
-                        except:
-                            continue
-                    else:
-                        projectedDB.append(item)
-                if not not projectedDB:
-                    DB.append(projectedDB)
-            if not not DB:
-                suffixDB.append(DB)
+                        except: continue
+                    else: projectedDB.append(item)
+                if projectedDB: DB.append(projectedDB)
+            if DB: suffixDB.append(DB)
 
         """
         # Iterating all items in the list of frequent concatenatable items
@@ -185,10 +178,10 @@ class Prefixspan:
         """
         for k, v in _freq.items():
             DB = []
-            for song in S:
+            for sequence in S:
                 projectedDB = []
                 itemNotFound = True
-                for item_pos, item in enumerate(song):
+                for item_pos, item in enumerate(sequence):
                     if itemNotFound and len(item) > 1:
                         try:
                             i = item.index(k)
@@ -198,14 +191,10 @@ class Prefixspan:
                                 residual = ['_']+item[i + 1:]  # only append if the residual subsequence contains at least 1 more item
                                 projectedDB.append(residual)
                             # If item is never found, do nothing, therefore no elif clause.
-                        except:
-                            continue
-                    elif itemNotFound == False:
-                        projectedDB.append(item)
-                if not not projectedDB:
-                    DB.append(projectedDB)
-            if not not DB:
-                _suffixDB.append(DB)
+                        except: continue
+                    elif itemNotFound == False: projectedDB.append(item)
+                if projectedDB: DB.append(projectedDB)
+            if DB: _suffixDB.append(DB)
 
         '''
         The new alpha projected database are passed in recursive calls to the
