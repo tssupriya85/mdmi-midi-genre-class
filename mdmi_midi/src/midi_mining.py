@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 #  Batch MIDI File Information Extractor & Preprocessor
 #  Made for the MDMI-F2011 Data Mining Project
@@ -19,10 +20,10 @@ discretization_granularity = 4
 """ File loader configuration """
 
 # Path of midi library. Should be set to local MDMI Dropbox folder
-midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
-#midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
+#midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
+midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 output_filename = '' # No filename means print to standard output
-file_limit = 1000 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+file_limit = 20 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -33,7 +34,7 @@ import os
 import csv
 import time
 import types
-import prefixSpan_noassembly_gap
+import prefixSpan_noassembly_gap_song
 
 """ ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
@@ -53,11 +54,29 @@ import prefixSpan_noassembly_gap
 """ Percussive """;             instruments += ["Tinkle Bell", "Agogo", "Steel Drums", "Woodblock", "Taiko Drum", "Melodic Tom", "Synth Drum"]
 """ Sound effects """;          instruments += ["Reverse Cymbal", "Guitar Fret Noise", "Breath Noise", "Seashore", "Bird Tweet", "Telephone Ring", "Helicopter", "Applause", "Gunshot"]
 
+# Entry 0 = MIDI intrument no. 24
+non_standard_percussion_lower =\
+["Zap/High Q/Click sound", "Brush hit hard", "Brush circle", "Brush hit soft", "Brush hit and circle", "Drumroll", "Castanets", "Snare Drum 3 (same tone as drumroll snare)", "Drumsticks hitting each other", "Bass Drum 3", "Hard hit snare"]
+# Entry 0 = MIDI intrument no. 35
+standard_percussion = ["Bass Drum 2", "Bass Drum 1", "Side Stick/Rimshot", "Snare Drum 1", "Hand Clap", "Snare Drum 2", "Low Tom 2", "Closed Hi-hat", "Low Tom 1",
+"Pedal Hi-hat", "Mid Tom 2", "Open Hi-hat", "Mid Tom 1", "High Tom 2", "Crash Cymbal 1", "High Tom 1", "Ride Cymbal 1", "Chinese Cymbal",
+"Ride Bell", "Tambourine", "Splash Cymbal", "Cowbell", "Crash Cymbal 2", "Vibra Slap", "Ride Cymbal 2", "High Bongo", "Low Bongo",
+"Mute High Conga", "Open High Conga", "Low Conga", "High Timbale",  "Low Timbale", "High Agogô", "Low Agogô", "Cabasa", "Maracas"
+"Short Whistle", "Long Whistle", "Short Güiro", "Long Güiro", "Claves", "High Wood Block", "Low Wood Block", "Mute Cuíca", "Open Cuíca",
+"Mute Triangle", "Open Triangle"]
+# Entry 0 = MIDI intrument no. 82
+non_standard_percussion_higher = ["Shaker", "Jingle bell/Sleigh bells", "Bell tree"]
+
+percussion = non_standard_percussion_lower + standard_percussion + non_standard_percussion_higher
+
 notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
 
 # Translate MIDI note numbers to internatinal note format
 def note(note_number):
     return notes[note_number % 12] + str((note_number // 12) - 1)
+
+def drum(note_number):
+    return percussion[note_number - 24]
 
 # Translate instrument number to instrument name
 def instrument(instrument_number):
@@ -116,15 +135,19 @@ def scan(file, artist, genre):
         last = -1
         for event in track.events:
             if event.type == midiparser.voice.NoteOn:
+                #print "channel", event.channel
+                if event.channel+1 == 10: #or ignore_notes:
+                    continue
                 tick = int(round(event.absolute / (float(info["midi_division"] / discretization_granularity))))
                 if tick >= last + 1:
-                    if allow_gaps_in_sequences:
+                    if track_notes: track_notes[len(track_notes)-1].sort() # <---- Sort notes so that e.g. [1, 2] == [2, 1]
+                    if allow_gaps_in_sequences: 
                         for _ in range(int(round(tick)-round(last))): track_notes.append([])
                     else:
                         track_notes.append([])
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
-                else: new_note = event.detail.note_no
+                else: new_note = event.detail.note_no % 12 # <--- Discretize to only 12 distinct notes
                 track_notes[len(track_notes)-1].append(new_note)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
             if event.type == midiparser.voice.ProgramChange:
@@ -166,6 +189,7 @@ def process_files(write_csv=True):
                             break
                         if write_csv and file_count == 0: csv_writer.writerow(info.keys()); # Print attribute header if this is the first file
                         file_count += 1
+                        if write_csv and output_filename == '': print "%4d| " % file_count, # print a count before each file if printing to standard output
                         # Write data using csv writer. If type is list, remove the enclosing "[" and "]" before writing.
                         if write_csv: csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in info.items()]) # Print values
                         if file_count == file_limit: return file_count # If file_count limit reached, stop scanning
@@ -200,7 +224,7 @@ if __name__ == "__main__":
 
     print_input = False
 
-    input = [item for sublist in global_notes for item in sublist] # Toss all sequences into one big list (no song division anymore)
+    #input = [item for sublist in global_notes for item in sublist] # Toss all sequences into one big list (no song division anymore)
 
     # Print chosen database
     if print_input:
@@ -209,12 +233,12 @@ if __name__ == "__main__":
             print seq
         print
 
-    min_support = file_limit / 10 + 10
+    min_support = 10
 
     print "Mining sequences with minimum support", min_support
 
     start_time = time.time() # Remember starting time
-    frequent_sequences = prefixSpan_noassembly_gap.frequent_sequences(input, min_support) # Run algorithm
+    frequent_sequences = prefixSpan_noassembly_gap_song.frequent_sequences(global_notes, min_support) # Run algorithm
     elapsed = (time.time() - start_time) # Compute processing time
 
     print_seperator("=", "Done mining sequences.")
@@ -235,11 +259,12 @@ if __name__ == "__main__":
     print "Result:"
     unprinted = 0
     for sequence, support in frequent_sequences:
-        if len(sequence) < 4 or not all_same(sequence):
+        if len(sequence) < 2 or not all_same(sequence):
             print sequence, ":", support
         else:
+            print "*", sequence, ":", support
             unprinted += 1
-    if unprinted > 0: print unprinted, "size (>4) sequences ignored since they contained only repetitions of the same element."
+    if unprinted > 0: print unprinted, "sequences marked with (*) contains only repetitions of the same element."
 
 
 
