@@ -308,7 +308,7 @@ class Event:
 	    self.type = meta_msg
 	else:
             # Block changed by MKS
-            print "WARNING! Unknown event: (channel_msg =", hex(channel_msg) + ", meta_msg =", hex(meta_msg) + ")"
+            # print "WARNING! Unknown event: (channel_msg =", hex(channel_msg) + ", meta_msg =", hex(meta_msg) + ")"
             File.UnknownEvents += 1
             return
 
