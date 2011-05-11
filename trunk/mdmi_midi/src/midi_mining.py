@@ -5,30 +5,31 @@
 #  Made for the MDMI-F2011 Data Mining Project
 #  by Martin Kjaer Svendsen & Perry Dahl Christensen
 
-""" Note sequence loader configuration """
+RAW, ONE_OCTAVE, DIFF = range(3)
 
+""" Note sequence loader configuration """
+note_format = ONE_OCTAVE
 # Lets sequences contain tuples of (time, note) instead of just notes. Time is discretized.
 # (would undiscretized be better for the sequence pattern mining algorithm?)
 timestamp_notes = False
-
 # Should there be empty slots in the array corresponding to gaps (pauses) between notes?
 allow_gaps_in_sequences = False
-
 # Notes per midi division, higher value means less change of note timing during time discretization, but more gaps between notes
 discretization_granularity = 4
 
 """ Frequent sequence occurrence counter configuration """
-
 # Minimum length of sequences to count occurrences for
-min_sequence_length = 3
+min_sequence_length = 4
+# Minimum support for frequent patterns as a percentage of total songs
+min_support_percentage = 75
 
 """ File loader configuration """
-
 # Path of midi library. Should be set to local MDMI Dropbox folder
-#midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
-midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
-output_filename = 'output_1000files_min_seq_3.csv' # No filename means print to standard output
-file_limit = 1000 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+#midi_library_path = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
+midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
+#output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\output_1000files_min_seq_2_min_sup_40pct.csv' # No filename means print to standard output
+output_filename = 'C:\skod.txt'
+file_limit = 4 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -75,6 +76,11 @@ non_standard_percussion_higher = ["Shaker", "Jingle bell/Sleigh bells", "Bell tr
 percussion = non_standard_percussion_lower + standard_percussion + non_standard_percussion_higher
 
 notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
+
+# ARFF
+
+arff_attribute_types = {"artist" : "STRING", "filename" : "STRING", "midi_division" : "NUMERIC", "midi_format" : "NUMERIC", "num_tracks" : "NUMERIC", "instruments" : "CLASS", "instrument_groups" : "CLASS", "genre" : "CLASS", "tempo" : "RELATIONAL", "unknown_events" : "NUMERIC"}
+arff_nominal_attribute_values = {"instrument_groups" : instrument_groups, "instruments" : instruments, "genre" : []}
 
 # Translate MIDI note numbers to international note format
 def note(note_number):
@@ -143,25 +149,34 @@ def scan(file, artist, genre):
 
     song_notes = []
     for track in midi.tracks:
+        previous_note = 0
         track_notes = []
         last = -1
         for event in track.events:
             if event.type == midiparser.voice.NoteOn:
                 #print "channel", event.channel
-                if event.channel+1 == 10: #or ignore_notes:
+                if event.channel+1 == 10: # Ignore percussion track
                     continue
                 tick = int(round(event.absolute / (float(info["midi_division"] / discretization_granularity))))
                 if tick >= last + 1:
-                    if track_notes: track_notes[len(track_notes)-1].sort() # <---- Sort notes so that e.g. [1, 2] == [2, 1]
+                    if track_notes: track_notes[len(track_notes)-1].sort() # Sort notes so that e.g. [1, 2] == [2, 1]
                     if allow_gaps_in_sequences: 
                         for _ in range(int(round(tick)-round(last))): track_notes.append([])
                     else:
                         track_notes.append([])
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
-                else: new_note = event.detail.note_no % 12 + 1# <--- Discretize to 12 distinct notes (1..12)
+                else:
+                    if   note_format == RAW: new_note = event.detail.note_no
+                    elif note_format == ONE_OCTAVE: new_note = event.detail.note_no % 12 + 1 # Discretize to 12 distinct notes (1..12)
+                    elif note_format == DIFF:
+                        #if len(track_notes[len(track_notes)-2]) != 1: previous_note = track_notes[len(track_notes)-2][0]
+                        new_note = (event.detail.note_no - previous_note)
+
                 track_notes[len(track_notes)-1].append(new_note)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
+                if note_format == DIFF:
+                    previous_note = event.detail.note_no
             if event.type == midiparser.voice.ProgramChange:
                 if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
                 if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
@@ -191,6 +206,7 @@ def process_files():
     for genre in os.listdir(midi_library_path): # Search all genre directories
         if genre[0] == ".": continue # Ignore hidden files
         if os.path.isdir(midi_library_path + genre):
+            arff_nominal_attribute_values["genre"].append(genre) # Add genre to list of values of nominal attribute "genre" (ARFF header)
             for artist in os.listdir(midi_library_path + genre): # Search all artist directories
                 if artist[0] == ".": continue # Ignore hidden files
                 for song in os.listdir(midi_library_path + genre + "\\" + artist): # Search for midi files in artist directory
@@ -209,10 +225,11 @@ def process_files():
     print
     return healthy_file_count
 
-# Converts a timestamt to a human friendly string, e.g. "2 hours, 46 minutes and 12.30 seconds"
+# Converts a timestamt to a pretty human-readable string, e.g. "2 hours, 46 minutes and 12.30 seconds"
 def pretty_time(timestamp):
     min, sec = divmod(timestamp, 60)
     hour, min = divmod(min, 60)
+    hour, min = int(hour), int(min)
     s = ""
     if hour:
         s += str(hour)
@@ -235,6 +252,27 @@ def write_csv():
     csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
     for info in global_info:
         csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())]) # Print values ---changed from " for key, value in info.items()])"
+
+def write_f(s):
+    print s
+
+def write_arff_header():
+    attributes = sorted(global_info[0].keys())
+    longest_attribute = max([len(attribute) for attribute in attributes])
+    attribute_format = "@ATTRIBUTE %-" + str(longest_attribute) + "s %s"
+    relation = output_filename.split("\\")
+    relation = relation[len(relation)-1]
+    write_f("@RELATION " + relation)
+    write_f("")
+    for attribute in sorted(attributes):
+        if attribute[:3] == "seq":
+            pass
+        elif arff_attribute_types[attribute] == "CLASS":
+            pass
+        else:
+            write_f(attribute_format % (attribute, arff_attribute_types[attribute]))
+
+    # instrument_groups, instruments, seq000 ... seq???
 
 # Main method
 if __name__ == "__main__":
@@ -262,9 +300,8 @@ if __name__ == "__main__":
             sequence_size += sys.getsizeof(track)
     print "Sequence data structure contains", sequence_count, "sequences, and uses", sequence_size // 1024.0**2, "MiB of memory."
 
-    min_support = files_processed / 10 + 2
-
-    print_seperator("=", "Mining sequences with minimum support " + str(min_support))
+    min_support = int(round(files_processed * (min_support_percentage / 100.0)))
+    print_seperator("=", "Mining sequences with minimum support " + str(min_support) + " (" + str(min_support_percentage) + "%)")
 
     start_time = time.time() # Remember starting time
     frequent_sequences = prefixSpan_noassembly_gap_song.frequent_sequences(global_notes, min_support) # Run algorithm
@@ -273,7 +310,7 @@ if __name__ == "__main__":
     # Display number of files processed and time elapsed in easily readable format
     print len(frequent_sequences), "frequent sequences mined in", pretty_time(elapsed) + "."
 
-    # Print result
+    # Print initially mined frequent patterns
     repetetive = 0
     for sequence, support in frequent_sequences:
         if len(sequence) == 1 or not all_same(sequence):
@@ -283,10 +320,23 @@ if __name__ == "__main__":
             repetetive += 1
     if repetetive > 0: print repetetive, "sequences marked with (*) contains only repetitions of the same element."
 
-    # Frequent sequences as a list (without the frequency count of the dictionary) and all_same sequences of size >1 removed
-    found_sequences = [sequence for sequence, frequency in frequent_sequences if len(sequence) >= min_sequence_length and (len(sequence) == 1 or not all_same(sequence))]
+    # Prune frequent sequences having too short length (< min_sequence_length) or containing only duplicate items
+    len_before = len(frequent_sequences)
+    frequent_sequences = [(sequence, frequency) for sequence, frequency in frequent_sequences if len(sequence) >= min_sequence_length and (len(sequence) == 1 or not all_same(sequence))]
+    diff_percent = int(round( ((len_before - len(frequent_sequences)) / (len_before * 1.0)) * 100 ))
+    print len_before - len(frequent_sequences), "(" + str(diff_percent) + "%) of the sequences pruned because they have a length less than", min_sequence_length, "or only contains repetitions of the same element."
 
-    print len(frequent_sequences) - len(found_sequences), "sequences is not counted because they have a length less than", min_sequence_length, "or only contains repetitions of the same element."
+    # Attribute naming format: (seq001, seq002, seq003, ...)
+    sequence_attribute_naming_format = "seq%0" + str(len(str(len(frequent_sequences)))) + "d"
+
+    # Print remaining frequent sequences after pruning
+    print_seperator("=", "Remaining frequent sequences:")
+    for seq_no, (sequence, support) in enumerate(frequent_sequences):
+        print sequence_attribute_naming_format % seq_no, "=", sequence, ":", support
+
+    # Frequent sequences as a list (without the frequency count of the dictionary)
+    found_sequences = [sequence for sequence, frequency in frequent_sequences]
+    # Counts the occurrence of each sequence in each song
     occurrence_count = [[0 for _ in range(len(frequent_sequences))] for _ in range(len(global_notes))]
 
     start_time = time.time() # Remember starting time
@@ -306,19 +356,15 @@ if __name__ == "__main__":
     elapsed = (time.time() - start_time) # Compute processing time
     print "Done in", pretty_time(elapsed) + "."
 
-    sequence_attribute_naming_format = "seq%0" + str(len(str(len(found_sequences)))) + "d"
-
     for i in range(len(global_info)):
         for j in range(len(found_sequences)):
             global_info[i][sequence_attribute_naming_format % j] = occurrence_count[i][j]
 
     print "Writing result in CSV format."
+    write_arff_header()
+    print
     write_csv()
     print_seperator("=", "Done writing CSV.")
-
-    for seq_no, sequence in enumerate(found_sequences):
-        print sequence_attribute_naming_format % seq_no, "=", sequence
-    print
 
     global_elapsed = (time.time() - global_start_time) # Compute processing time for whole program
 
