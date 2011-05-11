@@ -17,13 +17,18 @@ allow_gaps_in_sequences = False
 # Notes per midi division, higher value means less change of note timing during time discretization, but more gaps between notes
 discretization_granularity = 4
 
+""" Frequent sequence occurrence counter configuration """
+
+# Minimum length of sequences to count occurrences for
+min_sequence_length = 3
+
 """ File loader configuration """
 
 # Path of midi library. Should be set to local MDMI Dropbox folder
 #midi_library_path   = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
 midi_library_path   = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
-output_filename = '' # No filename means print to standard output
-file_limit = 20 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+output_filename = 'output_1000files_min_seq_3.csv' # No filename means print to standard output
+file_limit = 1000 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -71,10 +76,11 @@ percussion = non_standard_percussion_lower + standard_percussion + non_standard_
 
 notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
 
-# Translate MIDI note numbers to internatinal note format
+# Translate MIDI note numbers to international note format
 def note(note_number):
     return notes[note_number % 12] + str((note_number // 12) - 1)
 
+# Translate drum notes (found in MIDI channel 10) into names of drum sounds
 def drum(note_number):
     return percussion[note_number - 24]
 
@@ -93,11 +99,14 @@ def greatest_common_divisor(list):
         return a
     return reduce(gcd, list) # Return gcd(...(gcd(a,b),c))...)
 
+def all_same(items): # Return True if all elements in the list are the same
+    return all(x == items[0] for x in items)
+
 # Prints a vertical line with text on it to the standard output
 # Example: == Hello world! ==========================
 def print_seperator(seperator_char, text):
    if len(text) != 0: text = " " + text + " "
-   print(seperator_char * 2 + text + seperator_char * (40-len(text)))
+   print(seperator_char * 2 + text + seperator_char * (80-len(text)))
 
 # Prints a note sequence to the standard output
 def print_note_sequence(sequence):
@@ -111,13 +120,16 @@ def print_note_sequence(sequence):
             else: print note(n),
         print
 
-global_notes = []
+global_notes = [] # Note sequences, indexed by [song][sequence][item in sequence]
+global_info = [] # Song information, indexed by [song]
 
-# Scans a midi file and returns a dictionary containing information about the file
+# Scans a midi file and adds dictionary containing information from file to global_info and note sequences to global_notes
+# Returns error message if a problem problem is encountered, otherwise None.
 def scan(file, artist, genre):
     info = {}
     try: midi = midiparser.File(file)
-    except AssertionError: return # Return nothing if file could not be parsed
+    except AssertionError: # File could not be parsed
+        return "File corrupt or not a MIDI file."
 
     info["filename"]          = file.lstrip(midi_library_path)
     info["artist"]            = artist
@@ -147,7 +159,7 @@ def scan(file, artist, genre):
                         track_notes.append([])
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
-                else: new_note = event.detail.note_no % 12 # <--- Discretize to only 12 distinct notes
+                else: new_note = event.detail.note_no % 12 + 1# <--- Discretize to 12 distinct notes (1..12)
                 track_notes[len(track_notes)-1].append(new_note)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
             if event.type == midiparser.voice.ProgramChange:
@@ -163,19 +175,19 @@ def scan(file, artist, genre):
                 #print "  TimeSignature - Numerator:", event.detail.numerator, "Log_denominator:", event.detail.log_denominator, \
                 #"Midi_clocks:", event.detail.midi_clocks, "Thirty_seconds:", event.detail.thirty_seconds
         if track_notes: song_notes.append(track_notes)
-    if song_notes: global_notes.append(song_notes)
     info["unknown_events"] = midi.UnknownEvents
-    return info
+    if song_notes:
+        global_notes.append(song_notes)
+        global_info.append(info)
+    else:
+        return "File discarded, since no sequences could be extracted from it."
+    return
 
 # Processes files in library, one by one. Returns a count of the number of files processed.
-def process_files(write_csv=True):
-    # If no output_filename chosen, print to standard output, else to the chosen file
-    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
-    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
-    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
-
+def process_files():
     # Scan all midi files in library. Directory format is expected to be \Genre\Artist\
     file_count = 0 # Counts the number of MIDI files processed
+    healthy_file_count = 0 # Counts the number of files where information can actually be extracted
     for genre in os.listdir(midi_library_path): # Search all genre directories
         if genre[0] == ".": continue # Ignore hidden files
         if os.path.isdir(midi_library_path + genre):
@@ -183,32 +195,62 @@ def process_files(write_csv=True):
                 if artist[0] == ".": continue # Ignore hidden files
                 for song in os.listdir(midi_library_path + genre + "\\" + artist): # Search for midi files in artist directory
                     if not os.path.isdir(midi_library_path + genre + "\\" + artist + "\\" + song): # Ignore any subpaths in artist directory
-                        info = scan(midi_library_path + genre + "\\" + artist + "\\" + song, artist, genre) # Scan found midi file
-                        if not info: # Skip files with errors
-                            print "Error in MIDI file, skipped. (" + genre + "\\" + artist + "\\" + song + ")"
-                            break
-                        if write_csv and file_count == 0: csv_writer.writerow(info.keys()); # Print attribute header if this is the first file
+                        error = scan(midi_library_path + genre + "\\" + artist + "\\" + song, artist, genre) # Scan found midi file
                         file_count += 1
-                        if write_csv and output_filename == '': print "%4d| " % file_count, # print a count before each file if printing to standard output
-                        # Write data using csv writer. If type is list, remove the enclosing "[" and "]" before writing.
-                        if write_csv: csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in info.items()]) # Print values
-                        if file_count == file_limit: return file_count # If file_count limit reached, stop scanning
-    return file_count
+                        if error: # Skip files with errors
+                            print
+                            print "Error processing " + genre + "\\" + artist + "\\" + song + ":", error
+                            continue
+                        healthy_file_count += 1
+                        sys.stdout.write(".")
+                        if file_count == file_limit:
+                            print
+                            return healthy_file_count # If file_count limit reached, stop scanning
+    print
+    return healthy_file_count
 
+# Converts a timestamt to a human friendly string, e.g. "2 hours, 46 minutes and 12.30 seconds"
+def pretty_time(timestamp):
+    min, sec = divmod(timestamp, 60)
+    hour, min = divmod(min, 60)
+    s = ""
+    if hour:
+        s += str(hour)
+        if hour == 1: s += " hour, "
+        else: s += " hours, "
+    if min:
+        s += str(min)
+        if min == 1: s += " minute and "
+        else: s += " minutes and "
+    if sec: s += "%.2f seconds" % sec
+    return s
+
+# Writes content of global_info in the csv format
+def write_csv():
+    # If no output_filename chosen, print to standard output, else to the chosen file
+    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
+    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
+    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
+
+    csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
+    for info in global_info:
+        csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())]) # Print values ---changed from " for key, value in info.items()])"
+
+# Main method
 if __name__ == "__main__":
+    global_start_time = time.time() # Remember starting time for whole program
+
+    if file_limit < 0: # All files are processed
+        print_seperator("=", "Processing all files.")
+    else:
+        print_seperator("=", "Processing " + str(file_limit) + " files.")
+
     start_time = time.time() # Remember starting time
-    file_count = process_files(write_csv=True) # Do file processing
+    files_processed = process_files() # Do file processing
     elapsed = (time.time() - start_time) # Compute processing time
 
-    print_seperator("=", "Done.")
-
-    # Display number of files processed and time elapsed in easily readable format
-    m, s = divmod(elapsed, 60)
-    h, m = divmod(m, 60)
-    print file_count, "files processed in",
-    if h: print int(h), "hours,",
-    if m: print int(m), "minutes and",
-    if s: print "%.2f seconds." % s
+    # Print time elapsed
+    print "Information extracted from", files_processed, "files (" + str(file_limit - files_processed), "files skipped) in", pretty_time(elapsed) + "."
 
     # Determine and print size of data structure containing note sequences
     # Print a selected number of note sequences to standard output
@@ -220,51 +262,76 @@ if __name__ == "__main__":
             sequence_size += sys.getsizeof(track)
     print "Sequence data structure contains", sequence_count, "sequences, and uses", sequence_size // 1024.0**2, "MiB of memory."
 
-# PREFIX_SPAN FUN
+    min_support = files_processed / 10 + 2
 
-    print_input = False
-
-    #input = [item for sublist in global_notes for item in sublist] # Toss all sequences into one big list (no song division anymore)
-
-    # Print chosen database
-    if print_input:
-        print "Input:"
-        for seq in input:
-            print seq
-        print
-
-    min_support = 10
-
-    print "Mining sequences with minimum support", min_support
+    print_seperator("=", "Mining sequences with minimum support " + str(min_support))
 
     start_time = time.time() # Remember starting time
     frequent_sequences = prefixSpan_noassembly_gap_song.frequent_sequences(global_notes, min_support) # Run algorithm
     elapsed = (time.time() - start_time) # Compute processing time
 
-    print_seperator("=", "Done mining sequences.")
-
     # Display number of files processed and time elapsed in easily readable format
-    m, s = divmod(elapsed, 60)
-    h, m = divmod(m, 60)
-    print len(frequent_sequences), "frequent sequences mined in",
-    if h: print int(h), "hours,",
-    if m: print int(m), "minutes and",
-    if s: print "%.2f seconds." % s
-
-
-    def all_same(items):
-        return all(x == items[0] for x in items)
+    print len(frequent_sequences), "frequent sequences mined in", pretty_time(elapsed) + "."
 
     # Print result
-    print "Result:"
-    unprinted = 0
+    repetetive = 0
     for sequence, support in frequent_sequences:
-        if len(sequence) < 2 or not all_same(sequence):
+        if len(sequence) == 1 or not all_same(sequence):
             print sequence, ":", support
         else:
             print "*", sequence, ":", support
-            unprinted += 1
-    if unprinted > 0: print unprinted, "sequences marked with (*) contains only repetitions of the same element."
+            repetetive += 1
+    if repetetive > 0: print repetetive, "sequences marked with (*) contains only repetitions of the same element."
 
+    # Frequent sequences as a list (without the frequency count of the dictionary) and all_same sequences of size >1 removed
+    found_sequences = [sequence for sequence, frequency in frequent_sequences if len(sequence) >= min_sequence_length and (len(sequence) == 1 or not all_same(sequence))]
 
+    print len(frequent_sequences) - len(found_sequences), "sequences is not counted because they have a length less than", min_sequence_length, "or only contains repetitions of the same element."
+    occurrence_count = [[0 for _ in range(len(frequent_sequences))] for _ in range(len(global_notes))]
 
+    start_time = time.time() # Remember starting time
+    print_seperator("=", "Counting occurences of " + str(len(found_sequences)) + " frequent sequences in " + str(len(global_info)) + " songs.")
+    for song_no, song in enumerate(global_notes):
+        for track in song:
+            cursors = [0 for _ in range(len(found_sequences))]
+            for item in track:
+                for i in range(len(found_sequences)):
+                    if item == found_sequences[i][cursors[i]]: # Hit
+                        cursors[i] += 1
+                        if cursors[i] == len(found_sequences[i]): # Occurrence of whole frequence sequence found
+                            cursors[i] = 0
+                            occurrence_count[song_no][i] += 1
+                    else: # Miss
+                        cursors[i] = 0
+    elapsed = (time.time() - start_time) # Compute processing time
+    print "Done in", pretty_time(elapsed) + "."
+
+    sequence_attribute_naming_format = "seq%0" + str(len(str(len(found_sequences)))) + "d"
+
+    for i in range(len(global_info)):
+        for j in range(len(found_sequences)):
+            global_info[i][sequence_attribute_naming_format % j] = occurrence_count[i][j]
+
+    print "Writing result in CSV format."
+    write_csv()
+    print_seperator("=", "Done writing CSV.")
+
+    for seq_no, sequence in enumerate(found_sequences):
+        print sequence_attribute_naming_format % seq_no, "=", sequence
+    print
+
+    global_elapsed = (time.time() - global_start_time) # Compute processing time for whole program
+
+    print "Program done. Total runtime was " + pretty_time(global_elapsed) + "."
+    print "Bye."
+
+    '''
+    # Print the occurrence counts for each individual song
+    for song_no, song in enumerate(global_notes):
+        print "Song", song_no
+        for track in song:
+            print " ", track
+        print "-----------------------------------------------------------------------------------------------------------------------------------------"
+        for i in range(len(found_sequences)):
+            print found_sequences[i], ":", occurrence_count[song_no][i]
+    '''
