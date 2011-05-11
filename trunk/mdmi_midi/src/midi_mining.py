@@ -19,17 +19,17 @@ discretization_granularity = 4
 
 """ Frequent sequence occurrence counter configuration """
 # Minimum length of sequences to count occurrences for
-min_sequence_length = 4
+min_sequence_length = 3
 # Minimum support for frequent patterns as a percentage of total songs
-min_support_percentage = 75
+min_support_percentage = 25
 
 """ File loader configuration """
 # Path of midi library. Should be set to local MDMI Dropbox folder
 #midi_library_path = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
 midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
-#output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\output_1000files_min_seq_2_min_sup_40pct.csv' # No filename means print to standard output
-output_filename = 'C:\skod.txt'
-file_limit = 4 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\exciting_arff_file.arff' # No filename means print to standard output
+#output_filename = ''
+file_limit = 250 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -79,7 +79,7 @@ notes = ["C-", "C#", "D-", "D#", "E-", "F-", "F#", "G-", "G#", "A-", "A#", "B-"]
 
 # ARFF
 
-arff_attribute_types = {"artist" : "STRING", "filename" : "STRING", "midi_division" : "NUMERIC", "midi_format" : "NUMERIC", "num_tracks" : "NUMERIC", "instruments" : "CLASS", "instrument_groups" : "CLASS", "genre" : "CLASS", "tempo" : "RELATIONAL", "unknown_events" : "NUMERIC"}
+arff_attribute_types = {"artist" : "STRING", "filename" : "STRING", "midi_division" : "NUMERIC", "midi_format" : "NUMERIC", "num_tracks" : "NUMERIC", "instruments" : "NOMINAL", "instrument_groups" : "NOMINAL", "genre" : "NOMINAL", "tempo" : "RELATIONAL", "unknown_events" : "NUMERIC", "sequences" : "RELATIONAL"}
 arff_nominal_attribute_values = {"instrument_groups" : instrument_groups, "instruments" : instruments, "genre" : []}
 
 # Translate MIDI note numbers to international note format
@@ -142,10 +142,11 @@ def scan(file, artist, genre):
     info["genre"]             = genre
     info["num_tracks"]        = midi.num_tracks
     info["midi_division"]     = midi.division
-    info["tempo"]             = []
+#    info["tempo"]             = []
     info["instruments"]       = []
     info["instrument_groups"] = []
     info["midi_format"]       = midi.format
+    info["sequences"]         = [] # Counts of frequent sequences is added after frequent pattern mining is done
 
     song_notes = []
     for track in midi.tracks:
@@ -181,7 +182,8 @@ def scan(file, artist, genre):
                 if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
                 if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
             if event.type == midiparser.meta.SetTempo:
-                if event.detail.tempo not in info["tempo"]: info["tempo"].append(event.detail.tempo)
+                pass
+#                if event.detail.tempo not in info["tempo"]: info["tempo"].append(event.detail.tempo)
 	    if event.type == midiparser.meta.KeySignature:
 		pass
                 #print "  KeySignature - Fifths:", event.detail.fifths, "Mode:", event.detail.mode
@@ -195,7 +197,7 @@ def scan(file, artist, genre):
         global_notes.append(song_notes)
         global_info.append(info)
     else:
-        return "File discarded, since no sequences could be extracted from it."
+        return "File discarded, since no note sequences could be extracted from it."
     return
 
 # Processes files in library, one by one. Returns a count of the number of files processed.
@@ -242,19 +244,20 @@ def pretty_time(timestamp):
     if sec: s += "%.2f seconds" % sec
     return s
 
+# If no output_filename chosen, print to standard output, else to the chosen file
+if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
+if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
+
 # Writes content of global_info in the csv format
 def write_csv():
-    # If no output_filename chosen, print to standard output, else to the chosen file
-    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
-    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
     csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
 
-    csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
+#    csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
     for info in global_info:
         csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())]) # Print values ---changed from " for key, value in info.items()])"
 
 def write_f(s):
-    print s
+    output.write(s + "\n")
 
 def write_arff_header():
     attributes = sorted(global_info[0].keys())
@@ -265,13 +268,21 @@ def write_arff_header():
     write_f("@RELATION " + relation)
     write_f("")
     for attribute in sorted(attributes):
-        if attribute[:3] == "seq":
-            pass
-        elif arff_attribute_types[attribute] == "CLASS":
-            pass
+        if arff_attribute_types[attribute] == "NOMINAL":
+            line = attribute_format % (attribute, "")
+            line += "{"
+            line += ", ".join(["\"" + value + "\"" for value in arff_nominal_attribute_values[attribute]])
+            line += "}"
+            write_f(line)
         else:
             write_f(attribute_format % (attribute, arff_attribute_types[attribute]))
+            if arff_attribute_types[attribute] == "RELATIONAL":
+                for i in range(len(global_info[0][attribute])):
+                    write_f("  @ATTRIBUTE " + attribute + str(i) + " NUMERIC")
+                write_f("@END " + attribute)
 
+    write_f("")
+    write_f("@DATA")
     # instrument_groups, instruments, seq000 ... seq???
 
 # Main method
@@ -358,11 +369,11 @@ if __name__ == "__main__":
 
     for i in range(len(global_info)):
         for j in range(len(found_sequences)):
-            global_info[i][sequence_attribute_naming_format % j] = occurrence_count[i][j]
+            #global_info[i][sequence_attribute_naming_format % j] = occurrence_count[i][j]
+            global_info[i]["sequences"].append(occurrence_count[i][j])
 
     print "Writing result in CSV format."
     write_arff_header()
-    print
     write_csv()
     print_seperator("=", "Done writing CSV.")
 
