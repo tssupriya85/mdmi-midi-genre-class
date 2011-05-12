@@ -5,10 +5,10 @@
 #  Made for the MDMI-F2011 Data Mining Project
 #  by Martin Kjaer Svendsen & Perry Dahl Christensen
 
-RAW, ONE_OCTAVE, DIFF = range(3)
+note_formats = ["RAW", "ONE_OCTAVE", "SIMPLE_DIFF", "ADVANCED_DIFF"]
 
 """ Note sequence loader configuration """
-note_format = ONE_OCTAVE
+note_format = "ADVANCED_DIFF"
 # Lets sequences contain tuples of (time, note) instead of just notes. Time is discretized.
 # (would undiscretized be better for the sequence pattern mining algorithm?)
 timestamp_notes = False
@@ -19,9 +19,9 @@ discretization_granularity = 4
 
 """ Frequent sequence occurrence counter configuration """
 # Minimum length of sequences to count occurrences for
-min_sequence_length = 2
+min_sequence_length = 4
 # Minimum support for frequent patterns as a percentage of total songs
-min_support_percentage = 40
+min_support_percentage = 20
 
 """ File loader configuration """
 # Path of midi library. Should be set to local MDMI Dropbox folder
@@ -29,7 +29,7 @@ min_support_percentage = 40
 midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 #output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\output_1000files_min_seq_2_min_sup_40pct.arff' # No filename means print to standard output
 output_filename = 'C:\\skod.txt'
-file_limit = 10 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+file_limit = 100 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -41,6 +41,7 @@ import csv
 import time
 import types
 import prefixSpan_noassembly_gap_song
+from copy import copy
 
 """ ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
@@ -136,7 +137,8 @@ def scan(file, artist, genre):
     try: midi = midiparser.File(file)
     except AssertionError: # File could not be parsed
         return "File corrupt or not a MIDI file."
-
+    except IndexError:
+        return "Unexpected end of file."
     info["filename"]          = file.lstrip(midi_library_path)
     info["artist"]            = artist
     info["genre"]             = genre
@@ -167,16 +169,13 @@ def scan(file, artist, genre):
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
                 else:
-                    if   note_format == RAW: new_note = event.detail.note_no
-                    elif note_format == ONE_OCTAVE: new_note = event.detail.note_no % 12 + 1 # Discretize to 12 distinct notes (1..12)
-                    elif note_format == DIFF:
-                        #if len(track_notes[len(track_notes)-2]) != 1: previous_note = track_notes[len(track_notes)-2][0]
-                        new_note = (event.detail.note_no - previous_note)
+                    if   note_format == "RAW" or "ADVANCED_DIFF": new_note = event.detail.note_no
+                    elif note_format == "ONE_OCTAVE": new_note = event.detail.note_no % 12 + 1 # Discretize to 12 distinct notes (1..12)
+                    elif note_format == "SIMPLE_DIFF": new_note = (event.detail.note_no - previous_note)
 
                 track_notes[len(track_notes)-1].append(new_note)
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
-                if note_format == DIFF:
-                    previous_note = event.detail.note_no
+                if note_format == "SIMPLE_DIFF": previous_note = event.detail.note_no
             if event.type == midiparser.voice.ProgramChange:
                 if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
                 if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
@@ -189,6 +188,20 @@ def scan(file, artist, genre):
                 pass
                 #print "  TimeSignature - Numerator:", event.detail.numerator, "Log_denominator:", event.detail.log_denominator, \
                 #"Midi_clocks:", event.detail.midi_clocks, "Thirty_seconds:", event.detail.thirty_seconds
+        if track_notes and note_format == "ADVANCED_DIFF":
+            #old_track_notes = [list(item) for item in track_notes]
+            old = 0
+            for i in range(len(track_notes)):
+                diff = track_notes[i][0] - old
+                old  = track_notes[i][0]
+                if i != 0: track_notes[i][0] = diff
+                else: track_notes[i][0] = 0
+                for j in range (1, len(track_notes[i])):
+                    track_notes[i][j] = track_notes[i][0] + track_notes[i][j] - old
+            track_notes[0][0] = 0
+            #for i in range(len(old_track_notes)):
+            #    print "%-50s %-50s" % (old_track_notes[i], track_notes[i])
+            #sys.exit(0)
         if track_notes: song_notes.append(track_notes)
     info["unknown_events"] = midi.UnknownEvents
     if song_notes:
@@ -202,7 +215,8 @@ def scan(file, artist, genre):
 def process_files():
     # Scan all midi files in library. Directory format is expected to be \Genre\Artist\
     file_count = 0 # Counts the number of MIDI files processed
-    healthy_file_count = 0 # Counts the number of files where information can actually be extracted
+    files_skipped = 0
+    files_processed = 0 # Counts the number of files where information can actually be extracted
     for genre in os.listdir(midi_library_path): # Search all genre directories
         if genre[0] == ".": continue # Ignore hidden files
         if os.path.isdir(midi_library_path + genre):
@@ -216,14 +230,15 @@ def process_files():
                         if error: # Skip files with errors
                             print
                             print "Error processing " + genre + "\\" + artist + "\\" + song + ":", error
+                            files_skipped += 1
                             continue
-                        healthy_file_count += 1
+                        files_processed += 1
                         sys.stdout.write(".")
                         if file_count == file_limit:
                             print
-                            return healthy_file_count # If file_count limit reached, stop scanning
+                            return files_processed, files_skipped # If file_count limit reached, stop scanning
     print
-    return healthy_file_count
+    return files_processed, files_skipped
 
 # Converts a timestamt to a pretty human-readable string, e.g. "2 hours, 46 minutes and 12.30 seconds"
 def pretty_time(timestamp):
@@ -242,12 +257,12 @@ def pretty_time(timestamp):
     if sec: s += "%.2f seconds" % sec
     return s
 
-# If no output_filename chosen, print to standard output, else to the chosen file
-if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
-if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
-
 # Writes content of global_info in the csv format
 def write_csv():
+    # If no output_filename chosen, print to standard output, else to the chosen file
+    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
+    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
+
     csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
     csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
     for info in global_info:
@@ -255,6 +270,10 @@ def write_csv():
 
 
 def write_arff():
+    # If no output_filename chosen, print to standard output, else to the chosen file
+    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
+    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
+
     def writeln(s): output.write(s + "\n")
     """ Write ARFF Header """
     attributes = sorted(global_info[0].keys())
@@ -268,7 +287,7 @@ def write_arff():
         if arff_attribute_types[attribute] == "NOMINAL":
             line = attribute_format % (attribute, "")
             line += "{"
-            line += ", ".join([(str(value) if isinstance(value, types.IntType) else "\"" + value + "\"") for value in arff_nominal_attribute_values[attribute]])
+            line += ", ".join([(str(value) if (isinstance(value, types.IntType) or value == "?") else "\"" + value + "\"") for value in arff_nominal_attribute_values[attribute]])
             line += "}"
             writeln(line)
         else:
@@ -282,12 +301,47 @@ def write_arff():
     writeln("@DATA")
 
     """ Write ARFF Body """
-    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
+    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_MINIMAL) # Create a CSV Writer instance for output
     for info in global_info:
         csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())])
 
 # Main method
 if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        print "Command line arguments:"
+        for arg_no, arg in enumerate(sys.argv):
+            if arg_no == 1:
+                print "  midi_library_path =", arg
+                midi_library_path = arg
+            if arg_no == 2:
+                print "  output_filename =", arg
+                output_filename = arg
+            if arg_no == 3:
+                try: val = int(arg)
+                except: sys.exit(arg + " is not a number.")
+                print "  file_limit =", val
+                file_limit = val
+            if arg_no == 4:
+                try: val = int(arg)
+                except: sys.exit(arg + " is not a number.")
+                if val < 0 or val > 100: sys.exit("min_support_percentage out of bounds (should be between 0 and 100).")
+                print "  min_support_percentage =", val
+                min_support_percentage = val
+            if arg_no == 5:
+                try: val = int(arg)
+                except: sys.exit(arg + " is not a number.")
+                if val < 0: sys.exit("min_sequence_length out of bounds (should be >0).")
+                print "  min_sequence_length =", val
+                min_sequence_length = val
+            if arg_no == 6:
+                if arg not in note_formats: sys.exit("unknown note_format. Possible values: " + note_formats)
+                print "  note_format =", arg
+                note_format = arg
+#RAW, ONE_OCTAVE, SIMPLE_DIFF, ADVANCED_DIFF
+    else:
+        print "No command line arguments, using default values."
+        print "Usage: midi_mining.py midi_library_path output_filename file_limit min_support_percentage min_sequence_length note_format"
+
     global_start_time = time.time() # Remember starting time for whole program
 
     # All files are processed
@@ -296,11 +350,11 @@ if __name__ == "__main__":
     else: print_seperator("=", "Processing " + str(file_limit) + " files.")
 
     start_time = time.time() # Remember starting time
-    files_processed = process_files() # Do file processing
+    files_processed, files_skipped = process_files() # Do file processing
     elapsed = (time.time() - start_time) # Compute processing time
 
     # Print time elapsed
-    print "Information extracted from", files_processed, "files (" + str(file_limit - files_processed), "files skipped) in", pretty_time(elapsed) + "."
+    print "Information extracted from", files_processed, "files (" + str(files_skipped), "files skipped) in", pretty_time(elapsed) + "."
 
     # Determine size of data structure containing note sequences (and print a selected number of note sequences to standard output if print_note_sequences > 0)
     sequence_size, sequence_count = 0, 0
@@ -391,7 +445,10 @@ if __name__ == "__main__":
             if instrument_group in global_info[i]["instrument_groups"]: global_info[i][new_name] = 1
             else: global_info[i][new_name] = 0
         del global_info[i]["instrument_groups"]
-        global_info[i]["tempo"] = sum(global_info[i]["tempo"]) / len(global_info[i]["tempo"])
+        # Make tempo equal to the average of all tempi (no tempo means tempo = ? (= "unknown", according to the WEKA ARFF standard)
+        if global_info[i]["tempo"]:
+            global_info[i]["tempo"] = sum(global_info[i]["tempo"]) / len(global_info[i]["tempo"])
+        else: global_info[i]["tempo"] = "?"
         for j in range(len(found_sequences)):
             global_info[i][sequence_attribute_naming_format % j] = occurrence_count[i][j]
             #global_info[i]["sequences"].append(occurrence_count[i][j])
