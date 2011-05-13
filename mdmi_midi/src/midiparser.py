@@ -118,7 +118,6 @@ def getValues(str, n=16):
     return temp
 
 class File:
-    UnknownEvents = 0 # Added by MKS
     def __init__(self, file):
         self.file = file
         self.format = None
@@ -309,7 +308,6 @@ class Event:
 	else:
             # Block changed by MKS
             # print "WARNING! Unknown event: (channel_msg =", hex(channel_msg) + ", meta_msg =", hex(meta_msg) + ")"
-            File.UnknownEvents += 1
             return
 
 	return str

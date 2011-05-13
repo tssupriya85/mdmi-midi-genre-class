@@ -15,21 +15,21 @@ timestamp_notes = False
 # Should there be empty slots in the array corresponding to gaps (pauses) between notes?
 allow_gaps_in_sequences = False
 # Notes per midi division, higher value means less change of note timing during time discretization, but more gaps between notes
-discretization_granularity = 4
+discretization_granularity = 16
 
 """ Frequent sequence occurrence counter configuration """
 # Minimum length of sequences to count occurrences for
-min_sequence_length = 4
+min_sequence_length = 2
 # Minimum support for frequent patterns as a percentage of total songs
-min_support_percentage = 20
+min_support_percentage = 25
 
 """ File loader configuration """
 # Path of midi library. Should be set to local MDMI Dropbox folder
-#midi_library_path = 'E:\\My Documents\\My Dropbox\\MDMI\\' # MKS Stationary machine
-midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
+midi_library_path = 'E:\\My Documents\\My Dropbox\\MDMI\\midi_library\\genre_sorted\\' # MKS Stationary machine
+#midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 #output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\output_1000files_min_seq_2_min_sup_40pct.arff' # No filename means print to standard output
-output_filename = 'C:\\skod.txt'
-file_limit = 100 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+output_filename = 'C:\Skod.arff'
+file_limit = -1 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -41,7 +41,6 @@ import csv
 import time
 import types
 import prefixSpan_noassembly_gap_song
-from copy import copy
 
 """ ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
@@ -148,7 +147,6 @@ def scan(file, artist, genre):
     info["instruments"]       = []
     info["instrument_groups"] = []
     info["midi_format"]       = midi.format
-#    info["sequences"]         = [] # Counts of frequent sequences is added after frequent pattern mining is done
 
     song_notes = []
     for track in midi.tracks:
@@ -169,7 +167,7 @@ def scan(file, artist, genre):
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
                 else:
-                    if   note_format == "RAW" or "ADVANCED_DIFF": new_note = event.detail.note_no
+                    if   note_format == "RAW" or note_format == "ADVANCED_DIFF": new_note = event.detail.note_no
                     elif note_format == "ONE_OCTAVE": new_note = event.detail.note_no % 12 + 1 # Discretize to 12 distinct notes (1..12)
                     elif note_format == "SIMPLE_DIFF": new_note = (event.detail.note_no - previous_note)
 
@@ -177,8 +175,11 @@ def scan(file, artist, genre):
                 #print "{NoteOn}", "Absolute:", event.absolute, "Note_no:", note(event.detail.note_no), "Velocity:", event.detail.velocity
                 if note_format == "SIMPLE_DIFF": previous_note = event.detail.note_no
             if event.type == midiparser.voice.ProgramChange:
-                if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
-                if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
+                try:
+                    if instrument(event.detail.amount) not in info["instruments"]: info["instruments"].append(instrument(event.detail.amount))
+                    if instrument_group(event.detail.amount) not in info["instrument_groups"]: info["instrument_groups"].append(instrument_group(event.detail.amount))
+                except IndexError:
+                    return "Instrument number " + str(event.detail.amount) + " out of bounds."
             if event.type == midiparser.meta.SetTempo:
                 if event.detail.tempo not in info["tempo"]: info["tempo"].append(event.detail.tempo)
 	    if event.type == midiparser.meta.KeySignature:
@@ -189,21 +190,26 @@ def scan(file, artist, genre):
                 #print "  TimeSignature - Numerator:", event.detail.numerator, "Log_denominator:", event.detail.log_denominator, \
                 #"Midi_clocks:", event.detail.midi_clocks, "Thirty_seconds:", event.detail.thirty_seconds
         if track_notes and note_format == "ADVANCED_DIFF":
-            #old_track_notes = [list(item) for item in track_notes]
+#            old_track_notes = [list(item) for item in track_notes]
             old = 0
             for i in range(len(track_notes)):
                 diff = track_notes[i][0] - old
                 old  = track_notes[i][0]
                 if i != 0: track_notes[i][0] = diff
                 else: track_notes[i][0] = 0
+                old2 = old
                 for j in range (1, len(track_notes[i])):
-                    track_notes[i][j] = track_notes[i][0] + track_notes[i][j] - old
+                    diff = track_notes[i][j] - old2
+                    old2 = track_notes[i][j]
+                    track_notes[i][j] = diff
+#                for j in range (1, len(track_notes[i])):
+#                    track_notes[i][j] = track_notes[i][0] + track_notes[i][j] - old
             track_notes[0][0] = 0
-            #for i in range(len(old_track_notes)):
-            #    print "%-50s %-50s" % (old_track_notes[i], track_notes[i])
-            #sys.exit(0)
+#            for i in range(len(old_track_notes)):
+#                print "%-50s %-50s" % (old_track_notes[i], track_notes[i])
+#            print
         if track_notes: song_notes.append(track_notes)
-    info["unknown_events"] = midi.UnknownEvents
+    #info["unknown_events"] = midi.UnknownEvents
     if song_notes:
         global_notes.append(song_notes)
         global_info.append(info)
@@ -301,9 +307,11 @@ def write_arff():
     writeln("@DATA")
 
     """ Write ARFF Body """
-    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_MINIMAL) # Create a CSV Writer instance for output
+    #csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONE) # Create a CSV Writer instance for output
     for info in global_info:
-        csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())])
+        #writeln(",".join([(str(value) if (isinstance(value, types.IntType) or value == "?") else "\"" + value + "\"") for value in info]))
+        writeln(",".join([(str(value)[1:-1] if isinstance(value, types.ListType) else "\"" + value + "\"" if isinstance(value, types.StringType) and value != "?" else str(value)) for key, value in sorted(info.items())]))
+        #csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else "\"" + value + "\"" if isinstance(value, types.StringType) and value != "?" else value) for key, value in sorted(info.items())])
 
 # Main method
 if __name__ == "__main__":
@@ -311,8 +319,8 @@ if __name__ == "__main__":
         print "Command line arguments:"
         for arg_no, arg in enumerate(sys.argv):
             if arg_no == 1:
-                print "  midi_library_path =", arg
-                midi_library_path = arg
+                print "  midi_library_path =", arg + "\\"
+                midi_library_path = arg + "\\"
             if arg_no == 2:
                 print "  output_filename =", arg
                 output_filename = arg
@@ -334,10 +342,9 @@ if __name__ == "__main__":
                 print "  min_sequence_length =", val
                 min_sequence_length = val
             if arg_no == 6:
-                if arg not in note_formats: sys.exit("unknown note_format. Possible values: " + note_formats)
+                if arg not in note_formats: sys.exit("Unknown note_format. Possible values: " + note_formats)
                 print "  note_format =", arg
                 note_format = arg
-#RAW, ONE_OCTAVE, SIMPLE_DIFF, ADVANCED_DIFF
     else:
         print "No command line arguments, using default values."
         print "Usage: midi_mining.py midi_library_path output_filename file_limit min_support_percentage min_sequence_length note_format"
@@ -433,7 +440,7 @@ if __name__ == "__main__":
         new_name = "instrument_group_%02d_%s" % (instrument_group_no, instrument_group.replace(" ", "_"))
         arff_attribute_types[new_name] = "NOMINAL"
         arff_nominal_attribute_values[new_name] = [0,1]
-    arff_attribute_types["tempo"] = "NUMERIC" # Because we take average of all tempi now (WEKA do not like variable length lists)
+    arff_attribute_types["tempo"] = "NUMERIC" # Because we take average of all tempi now (WEKA does not like variable length lists)
     for i in range(len(global_info)):
         for instrument_no, instrument in enumerate(instruments):
             new_name = "instrument_%03d_%s" % (instrument_no, instrument.replace(" ", "_"))
