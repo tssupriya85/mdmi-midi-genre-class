@@ -1,21 +1,27 @@
 #!/usr/bin/python
 # -*- coding: utf-8 -*-
+"""
+  Batch MIDI File Information Extractor & Preprocessor
+  Made for the MDMI-F2011 Data Mining Project
+  by Martin Kjaer Svendsen & Perry Dahl Christensen
+"""
 
-#  Batch MIDI File Information Extractor & Preprocessor
-#  Made for the MDMI-F2011 Data Mining Project
-#  by Martin Kjaer Svendsen & Perry Dahl Christensen
 
 note_formats = ["RAW", "ONE_OCTAVE", "SIMPLE_DIFF", "ADVANCED_DIFF"]
 
+octave_discretize_notes = False
 """ Note sequence loader configuration """
+# RAW: Sequences consists of plain MIDI note numbers
+# ONE_OCTAVE: MIDI note numbers discretized to (0..11)
+# SIMPLE_DIFF: Each new node is changed to the difference to the previous one
+# ADVANCED_DIFF: Ignores consecutive instances of the same note; Differences in notes and between notes inside chords
 note_format = "ADVANCED_DIFF"
 # Lets sequences contain tuples of (time, note) instead of just notes. Time is discretized.
-# (would undiscretized be better for the sequence pattern mining algorithm?)
 timestamp_notes = False
-# Should there be empty slots in the array corresponding to gaps (pauses) between notes?
+# Allow empty slots in the array corresponding to gaps (pauses) between notes
 allow_gaps_in_sequences = False
 # Notes per midi division, higher value means less change of note timing during time discretization, but more gaps between notes
-discretization_granularity = 16
+discretization_granularity = 4
 
 """ Frequent sequence occurrence counter configuration """
 # Minimum length of sequences to count occurrences for
@@ -29,7 +35,7 @@ midi_library_path = 'E:\\My Documents\\My Dropbox\\MDMI\\midi_library\\genre_sor
 #midi_library_path = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\' # MKS Laptop
 #output_filename = 'C:\\Users\\mks\\Documents\\My Dropbox\\MDMI\\output_1000files_min_seq_2_min_sup_40pct.arff' # No filename means print to standard output
 output_filename = 'C:\Skod.arff'
-file_limit = -1 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
+file_limit = 25 # Indicates how many files should be processed before stopping. -1 means that all files will be processed
 print_note_sequences = 0 # Prints x first note sequences when done processing MIDI files
 
 ################################################################################
@@ -37,10 +43,11 @@ print_note_sequences = 0 # Prints x first note sequences when done processing MI
 import sys
 import midiparser
 import os
-import csv
 import time
 import types
 import prefixSpan_noassembly_gap_song
+from math import copysign
+from sets import Set
 
 """ ( Groups ) """;        instrument_groups = ["Piano", "Chromatic Percussion", "Organ", "Guitar", "Bass", "Strings", "Ensemble", "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic", "Percussive", "Sound effects"]
 """ Piano """;                  instruments  = ["Acoustic Grand Piano", "Bright Acoustic Piano", "Electric Grand Piano", "Honky-tonk Piano", "Electric Piano 1", "Electric Piano 2", "Harpsichord", "Clavinet"]
@@ -134,10 +141,11 @@ global_info = [] # Song information, indexed by [song]
 def scan(file, artist, genre):
     info = {}
     try: midi = midiparser.File(file)
-    except AssertionError: # File could not be parsed
+    except AssertionError: # Error reading headers
         return "File corrupt or not a MIDI file."
-    except IndexError:
+    except IndexError: # File just suddently stops in the middle of something (IndexError on the variable containing the file contents)
         return "Unexpected end of file."
+    
     info["filename"]          = file.lstrip(midi_library_path)
     info["artist"]            = artist
     info["genre"]             = genre
@@ -157,7 +165,7 @@ def scan(file, artist, genre):
             if event.type == midiparser.voice.NoteOn:
                 if event.channel+1 == 10: # Ignore percussion track
                     continue
-                tick = int(round(event.absolute / (float(info["midi_division"] / discretization_granularity))))
+                tick = int(round(event.absolute / (float(info["midi_division"]) / discretization_granularity)))
                 if tick >= last + 1:
                     if track_notes: track_notes[len(track_notes)-1].sort() # Sort notes so that e.g. [1, 2] == [2, 1]
                     if allow_gaps_in_sequences: 
@@ -167,8 +175,9 @@ def scan(file, artist, genre):
                     last = tick
                 if timestamp_notes: new_note = tuple([tick, event.detail.note_no])
                 else:
-                    if   note_format == "RAW" or note_format == "ADVANCED_DIFF": new_note = event.detail.note_no
-                    elif note_format == "ONE_OCTAVE": new_note = event.detail.note_no % 12 + 1 # Discretize to 12 distinct notes (1..12)
+                    if   octave_discretize_notes: new_note = event.detail.note_no % 12
+                    elif note_format == "RAW" or note_format == "ADVANCED_DIFF": new_note = event.detail.note_no
+                    elif note_format == "ONE_OCTAVE": new_note = event.detail.note_no % 12 # Discretize to 12 distinct notes (0..11)
                     elif note_format == "SIMPLE_DIFF": new_note = (event.detail.note_no - previous_note)
 
                 track_notes[len(track_notes)-1].append(new_note)
@@ -189,10 +198,40 @@ def scan(file, artist, genre):
                 pass
                 #print "  TimeSignature - Numerator:", event.detail.numerator, "Log_denominator:", event.detail.log_denominator, \
                 #"Midi_clocks:", event.detail.midi_clocks, "Thirty_seconds:", event.detail.thirty_seconds
+        pp = False
+        sign = lambda x: int(copysign(1, x))
+        uniqify = lambda x: list(Set(x))
         if track_notes and note_format == "ADVANCED_DIFF":
-#            old_track_notes = [list(item) for item in track_notes]
+            if pp: old_track_notes = [list(item) for item in track_notes]
+            new_track_notes = []
+            old_chord, last_solo = [], -1
+            for i in range(1, len(track_notes)):
+                if not track_notes[i]: continue # Neccessary if gaps are allowed
+                if len(track_notes[i]) > 1:
+                    new_chord = []
+                    for j in range (1, len(track_notes[i])):
+                        diff2 = track_notes[i][j] - track_notes[i][j-1]
+                        new_chord.append(abs(diff2) % 12 * sign(diff2))
+                    new_chord = uniqify(new_chord)
+                    if new_chord == old_chord: continue
+                    old_chord = new_chord[:]
+                    new_track_notes.append(new_chord)
+                else:
+                    old_chord = []
+                    diff = track_notes[i][0] - last_solo
+                    new = [abs(diff) % 12 * sign(diff)]
+                    if track_notes[i] == last_solo: continue
+                    last_solo = track_notes[i][0]
+                    new_track_notes.append(new)
+
+                #for j in range (1, len(track_notes[i])):
+                #    diff2 = track_notes[i][j] - track_notes[i][j-1]
+                #    new_track_notes[-1].append(abs(diff2) % 12 * sign(diff2))
+            track_notes = new_track_notes
+            '''
             old = 0
             for i in range(len(track_notes)):
+                if not track_notes[i]: continue
                 diff = track_notes[i][0] - old
                 old  = track_notes[i][0]
                 if i != 0: track_notes[i][0] = diff
@@ -204,20 +243,23 @@ def scan(file, artist, genre):
                     track_notes[i][j] = diff
 #                for j in range (1, len(track_notes[i])):
 #                    track_notes[i][j] = track_notes[i][0] + track_notes[i][j] - old
-            track_notes[0][0] = 0
-#            for i in range(len(old_track_notes)):
-#                print "%-50s %-50s" % (old_track_notes[i], track_notes[i])
-#            print
+#            if track_notes[0]: track_notes[0][0] = 0
+            '''
+            if pp:
+                for i in range(len(old_track_notes)):
+                    try: print "%-50s %-50s" % (old_track_notes[i], track_notes[i])
+                    except: pass
+                print
         if track_notes: song_notes.append(track_notes)
     #info["unknown_events"] = midi.UnknownEvents
     if song_notes:
         global_notes.append(song_notes)
         global_info.append(info)
     else:
-        return "File discarded, since no note sequences could be extracted from it."
+        return "No note sequences could be extracted from file."
     return
 
-# Processes files in library, one by one. Returns a count of the number of files processed.
+# Processes files in library, one by one. Returns a count of the number of files processed, and files skipped due to errors
 def process_files():
     # Scan all midi files in library. Directory format is expected to be \Genre\Artist\
     file_count = 0 # Counts the number of MIDI files processed
@@ -233,6 +275,9 @@ def process_files():
                     if not os.path.isdir(midi_library_path + genre + "\\" + artist + "\\" + song): # Ignore any subpaths in artist directory
                         error = scan(midi_library_path + genre + "\\" + artist + "\\" + song, artist, genre) # Scan found midi file
                         file_count += 1
+                        if file_count % 1000 == 0:
+                            print
+                            print_seperator("-", str(file_count / 1000) + ".000 files done.")
                         if error: # Skip files with errors
                             print
                             print "Error processing " + genre + "\\" + artist + "\\" + song + ":", error
@@ -260,51 +305,41 @@ def pretty_time(timestamp):
         s += str(min)
         if min == 1: s += " minute and "
         else: s += " minutes and "
-    if sec: s += "%.2f seconds" % sec
+    if sec: s += "%.1f seconds" % sec
     return s
 
-# Writes content of global_info in the csv format
-def write_csv():
-    # If no output_filename chosen, print to standard output, else to the chosen file
-    if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
-    if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
-
-    csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONNUMERIC) # Create a CSV Writer instance for output
-    csv_writer.writerow(sorted(global_info[0].keys())); # Print attribute header
-    for info in global_info:
-        csv_writer.writerow([(str(value)[1:-1] if isinstance(value, types.ListType) else value) for key, value in sorted(info.items())]) # Print values ---changed from " for key, value in info.items()])"
-
-
-def write_arff():
+# Writes content of global_info to a file in the CSV format, with or without an ARFF header telling WEKA about the attribute types
+def write_file(arff_header=True):
     # If no output_filename chosen, print to standard output, else to the chosen file
     if not output_filename: output = sys.stdout # No output_filename given, use standard output for csv data
     if output_filename: output = open(output_filename, 'wb') # output_filename given, open this file for writing csv data
 
     def writeln(s): output.write(s + "\n")
-    """ Write ARFF Header """
-    attributes = sorted(global_info[0].keys())
-    longest_attribute = max([len(attribute) for attribute in attributes])
-    attribute_format = "@ATTRIBUTE %-" + str(longest_attribute) + "s %s"
-    relation = output_filename.split("\\")
-    relation = relation[len(relation)-1]
-    writeln("@RELATION " + relation)
-    writeln("")
-    for attribute in sorted(attributes):
-        if arff_attribute_types[attribute] == "NOMINAL":
-            line = attribute_format % (attribute, "")
-            line += "{"
-            line += ", ".join([(str(value) if (isinstance(value, types.IntType) or value == "?") else "\"" + value + "\"") for value in arff_nominal_attribute_values[attribute]])
-            line += "}"
-            writeln(line)
-        else:
-            writeln(attribute_format % (attribute, arff_attribute_types[attribute]))
-            if arff_attribute_types[attribute] == "RELATIONAL":
-                for i in range(len(global_info[0][attribute])):
-                    writeln("  @ATTRIBUTE " + attribute + str(i) + " NUMERIC")
-                writeln("@END " + attribute)
 
-    writeln("")
-    writeln("@DATA")
+    """ Write ARFF Header """
+    if arff_header:
+        attributes = sorted(global_info[0].keys())
+        longest_attribute = max([len(attribute) for attribute in attributes])
+        attribute_format = "@ATTRIBUTE %-" + str(longest_attribute) + "s %s"
+        relation = output_filename.split("\\")
+        relation = relation[len(relation)-1]
+        writeln("@RELATION " + relation)
+        writeln("")
+        for attribute in sorted(attributes):
+            if arff_attribute_types[attribute] == "NOMINAL":
+                line = attribute_format % (attribute, "")
+                line += "{"
+                line += ", ".join([(str(value) if (isinstance(value, types.IntType) or value == "?") else "\"" + value + "\"") for value in arff_nominal_attribute_values[attribute]])
+                line += "}"
+                writeln(line)
+            else:
+                writeln(attribute_format % (attribute, arff_attribute_types[attribute]))
+                if arff_attribute_types[attribute] == "RELATIONAL":
+                    for i in range(len(global_info[0][attribute])):
+                        writeln("  @ATTRIBUTE " + attribute + str(i) + " NUMERIC")
+                    writeln("@END " + attribute)
+        writeln("")
+        writeln("@DATA")
 
     """ Write ARFF Body """
     #csv_writer = csv.writer(output, delimiter=',', quotechar='\"', quoting=csv.QUOTE_NONE) # Create a CSV Writer instance for output
@@ -315,6 +350,7 @@ def write_arff():
 
 # Main method
 if __name__ == "__main__":
+    # Check command line arguments and set parameters accordingly
     if len(sys.argv) > 1:
         print "Command line arguments:"
         for arg_no, arg in enumerate(sys.argv):
@@ -345,15 +381,16 @@ if __name__ == "__main__":
                 if arg not in note_formats: sys.exit("Unknown note_format. Possible values: " + note_formats)
                 print "  note_format =", arg
                 note_format = arg
+    # No command line parameters set, inform user about the possibilites
     else:
         print "No command line arguments, using default values."
         print "Usage: midi_mining.py midi_library_path output_filename file_limit min_support_percentage min_sequence_length note_format"
 
     global_start_time = time.time() # Remember starting time for whole program
 
-    # All files are processed
+    # If all files are processed, write this
     if file_limit < 0: print_seperator("=", "Processing all files.")
-    # Some files processed
+    # If some files processed, write how many
     else: print_seperator("=", "Processing " + str(file_limit) + " files.")
 
     start_time = time.time() # Remember starting time
@@ -365,13 +402,18 @@ if __name__ == "__main__":
 
     # Determine size of data structure containing note sequences (and print a selected number of note sequences to standard output if print_note_sequences > 0)
     sequence_size, sequence_count = 0, 0
+    sequence_lengths = []
     for song in global_notes:
         for track in song:
             if sequence_count < print_note_sequences: print_note_sequence(track)
             sequence_count += 1
             sequence_size += sys.getsizeof(track)
+            sequence_lengths.append(len(track))
     print "Sequence data structure contains", sequence_count, "sequences, and uses", sequence_size // 1024.0**2, "MiB of memory."
+    print "Max track length:", max(sequence_lengths), "  Min track length:", min(sequence_lengths)
+    print "Average track length:", sum(sequence_lengths) / len(sequence_lengths), "  Median track length:", sorted(sequence_lengths)[len(sequence_lengths) / 2]
 
+    # Compute minimum support according to chosen percentage
     min_support = int(round(files_processed * (min_support_percentage / 100.0)))
     print_seperator("=", "Mining sequences with minimum support " + str(min_support) + " (" + str(min_support_percentage) + "%)")
 
@@ -393,10 +435,15 @@ if __name__ == "__main__":
     if repetetive > 0: print repetetive, "sequences marked with (*) contains only repetitions of the same element."
 
     # Prune frequent sequences having too short length (< min_sequence_length) or containing only duplicate items
+    if note_format not in ["SIMPLE_DIFF", "ADVANCED_DIFF"]:
+        len_before = len(frequent_sequences)
+        frequent_sequences = [(sequence, frequency) for sequence, frequency in frequent_sequences if len(sequence) == 1 or not all_same(sequence)]
+        diff_percent = int(round( ((len_before - len(frequent_sequences)) / (len_before * 1.0)) * 100 ))
+        print len_before - len(frequent_sequences), "(" + str(diff_percent) + "%) of the sequences pruned because they only contains repetitions of the same element."
     len_before = len(frequent_sequences)
-    frequent_sequences = [(sequence, frequency) for sequence, frequency in frequent_sequences if len(sequence) >= min_sequence_length and (len(sequence) == 1 or not all_same(sequence))]
+    frequent_sequences = [(sequence, frequency) for sequence, frequency in frequent_sequences if len(sequence) >= min_sequence_length]
     diff_percent = int(round( ((len_before - len(frequent_sequences)) / (len_before * 1.0)) * 100 ))
-    print len_before - len(frequent_sequences), "(" + str(diff_percent) + "%) of the sequences pruned because they have a length less than", min_sequence_length, "or only contains repetitions of the same element."
+    print len_before - len(frequent_sequences), "(" + str(diff_percent) + "%) of the sequences pruned because they have a length less than", min_sequence_length
 
     # Attribute naming format: (seq001, seq002, seq003, ...)
     sequence_attribute_naming_format = "seq%0" + str(len(str(len(frequent_sequences)))) + "d"
@@ -462,14 +509,15 @@ if __name__ == "__main__":
 
     # Write ARFF file, either to file og standard output if output_filename = ''
     print "Writing result in ARFF format."
-    write_arff()
-    #write_csv()
+    write_file(arff_header=True)
     print_seperator("=", "Done writing ARFF.")
 
     global_elapsed = (time.time() - global_start_time) # Compute processing time for whole program
 
+    # Print total processing time for whole program and say goodbye.
     print "Program done. Total runtime was " + pretty_time(global_elapsed) + "."
-    print "Bye."
+    print "Bye." # \A makes a beep sound
+    print chr(7) # Beep!
 
     '''
     # Print the occurrence counts for each individual song
