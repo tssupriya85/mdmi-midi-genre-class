@@ -1,0 +1,1 @@
+Applying pattern mining techniques and supervised learning to classify different genres of midi files
